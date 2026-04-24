@@ -15,8 +15,10 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/alfreddobradi/actors/pkg/system"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 )
 
@@ -33,7 +35,8 @@ func (e *ExampleActor) GetKind() string {
 	return "ExampleActor"
 }
 
-func (e *ExampleActor) HandleMessage(ctx context.Context, msg system.Message) error {
+func (e *ExampleActor) HandleMessage(ctx context.Context, msg system.Message) system.HandleError {
+	spew.Dump(msg)
 	slog.Info("Handling message", "actorID", e.GetID(), "messageID", msg.ID, "payload", string(msg.Payload))
 
 	return nil
@@ -67,6 +70,11 @@ func terminatedHook(ctx context.Context, actor system.Actor) error {
 	return nil
 }
 
+func crashHook(ctx context.Context, actor system.Actor) error {
+	slog.Info("Running crash hook", "actorID", actor.GetID())
+	return nil
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -83,11 +91,14 @@ func main() {
 
 	// Spawn an instance of ExampleActor using the factory function stored in the registry.
 	// This is also where we can attach hooks to the actor's lifecycle events.
-	handler, err := registry.Spawn("ExampleActor",
+	handler, err := registry.Spawn(
+		ctx,
+		"ExampleActor",
 		system.WithPreStartHook(preStartHook),
 		system.WithPostStartHook(postStartHook),
 		system.WithPoisonedHook(poisonedHook),
 		system.WithTerminatedHook(terminatedHook),
+		system.WithCrashHook(crashHook),
 	)
 	if err != nil {
 		slog.Error("Failed to spawn actor", "error", err)
@@ -101,6 +112,7 @@ func main() {
 
 	handler.Stop()
 
+	time.Sleep(200 * time.Millisecond)
 	// Send another message after stopping to demonstrate that it won't be processed.
 	handler.SendMessage(ctx, system.Message{ID: uuid.New(), Payload: []byte("this should not be handled")})
 
