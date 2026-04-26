@@ -17,6 +17,20 @@ import (
 * Lifecycle events
  */
 
+const (
+	HookPreStart   = "preStart"
+	HookPostStart  = "postStart"
+	HookPoisoned   = "poisoned"
+	HookTerminated = "terminated"
+	HookCrash      = "crash"
+)
+
+type ContextKey string
+
+const (
+	ContextKeyError ContextKey = "error"
+)
+
 type Hook func(context.Context, Actor) error
 
 type HookCollection struct {
@@ -73,7 +87,7 @@ type Actor interface {
 	GetID() uuid.UUID
 	GetKind() string
 
-	HandleMessage(context.Context, Message) error
+	HandleMessage(context.Context, Message) HandleError
 }
 
 type ActorHandler struct {
@@ -89,6 +103,7 @@ type ActorHandler struct {
 	postStartHooks  *HookCollection
 	poisonedHooks   *HookCollection
 	terminatedHooks *HookCollection
+	crashHooks      *HookCollection
 }
 
 func NewActorHandler(actor Actor, opts ...HandlerOpt) *ActorHandler {
@@ -97,6 +112,12 @@ func NewActorHandler(actor Actor, opts ...HandlerOpt) *ActorHandler {
 		inbox: make(chan Message, 100), // Buffered channel for messages
 		stop:  make(chan struct{}),
 		done:  make(chan struct{}),
+
+		preStartHooks:   NewHookCollection(HookPreStart),
+		postStartHooks:  NewHookCollection(HookPostStart),
+		poisonedHooks:   NewHookCollection(HookPoisoned),
+		terminatedHooks: NewHookCollection(HookTerminated),
+		crashHooks:      NewHookCollection(HookCrash),
 	}
 
 	for _, opt := range opts {
@@ -115,6 +136,8 @@ func (h *ActorHandler) Stop() {
 }
 
 func (h *ActorHandler) Start(ctx context.Context) {
+	var handleError HandleError
+
 	defer close(h.done)
 	defer func() {
 		// Run terminated hooks
@@ -125,8 +148,9 @@ func (h *ActorHandler) Start(ctx context.Context) {
 	defer func() {
 		// If the actor is terminating but wasn't poisoned it's an unexpected termination
 		// TODO Add recovery logic (log, spawn new actor of the same kind, etc.)
-		if !h.poisoned.Load() {
-			slog.Error("Unexpected actor termination", "actor_id", h.actor.GetID())
+		if !h.poisoned.Load() && h.crashHooks != nil {
+			ctx = context.WithValue(ctx, ContextKeyError, handleError)
+			h.crashHooks.run(ctx, h.actor)
 			return
 		}
 	}()
@@ -140,8 +164,9 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			}
 
 			// Handle incoming message
-			if err := h.actor.HandleMessage(ctx, msg); err != nil {
-				slog.Warn("Error handling message", "error", err)
+			handleError = h.actor.HandleMessage(ctx, msg)
+			if !handleError.IsRecoverable() {
+				return
 			}
 		case <-h.stop:
 			h.poisoned.Store(true)
@@ -154,7 +179,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			close(h.inbox)
 
 			for m := range h.inbox {
-				slog.Warn("Actor is stopping, ignoring message", "actor_id", h.actor.GetID(), "message", m)
+				slog.Warn("Actor is poisoned, ignoring message", "actor_id", h.actor.GetID(), "message", string(m.Payload))
 			}
 
 			// Handle actor termination
@@ -176,7 +201,7 @@ func (h *ActorHandler) SendMessage(ctx context.Context, msg Message) {
 	h.inbox <- msg
 }
 
-func Spawn(ctx context.Context, fn ActorFactory, opts ...HandlerOpt) *ActorHandler {
+func spawn(ctx context.Context, fn ActorFactory, opts ...HandlerOpt) *ActorHandler {
 	actor := fn(ctx)
 
 	handler := NewActorHandler(actor, opts...)

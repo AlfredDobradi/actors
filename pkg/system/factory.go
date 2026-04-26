@@ -44,20 +44,20 @@ func (r *FactoryRegistry) Clear() {
 	r.registry = make(map[string]ActorFactory)
 }
 
-func (r *FactoryRegistry) Spawn(kind string, opts ...HandlerOpt) (*ActorHandler, error) {
+func (r *FactoryRegistry) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*ActorHandler, error) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 	factory, exists := r.registry[kind]
 	if !exists {
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
 	}
-	return Spawn(context.Background(), factory, opts...), nil
+	return spawn(ctx, factory, opts...), nil
 }
 
 func WithPreStartHook(hook Hook) HandlerOpt {
 	return func(h *ActorHandler) {
 		if h.preStartHooks == nil {
-			h.preStartHooks = NewHookCollection("preStart")
+			h.preStartHooks = NewHookCollection(HookPreStart)
 		}
 		h.preStartHooks.Add(hook)
 	}
@@ -66,7 +66,7 @@ func WithPreStartHook(hook Hook) HandlerOpt {
 func WithPostStartHook(hook Hook) HandlerOpt {
 	return func(h *ActorHandler) {
 		if h.postStartHooks == nil {
-			h.postStartHooks = NewHookCollection("postStart")
+			h.postStartHooks = NewHookCollection(HookPostStart)
 		}
 		h.postStartHooks.Add(hook)
 	}
@@ -75,7 +75,7 @@ func WithPostStartHook(hook Hook) HandlerOpt {
 func WithPoisonedHook(hook Hook) HandlerOpt {
 	return func(h *ActorHandler) {
 		if h.poisonedHooks == nil {
-			h.poisonedHooks = NewHookCollection("poisoned")
+			h.poisonedHooks = NewHookCollection(HookPoisoned)
 		}
 		h.poisonedHooks.Add(hook)
 	}
@@ -84,8 +84,17 @@ func WithPoisonedHook(hook Hook) HandlerOpt {
 func WithTerminatedHook(hook Hook) HandlerOpt {
 	return func(h *ActorHandler) {
 		if h.terminatedHooks == nil {
-			h.terminatedHooks = NewHookCollection("terminated")
+			h.terminatedHooks = NewHookCollection(HookTerminated)
 		}
 		h.terminatedHooks.Add(hook)
+	}
+}
+
+func WithCrashHook(hook Hook) HandlerOpt {
+	return func(h *ActorHandler) {
+		if h.crashHooks == nil {
+			h.crashHooks = NewHookCollection(HookCrash)
+		}
+		h.crashHooks.Add(hook)
 	}
 }
