@@ -83,6 +83,18 @@ func (h *ActorHandler) GetActor() Actor {
 	return h.actor
 }
 
+func (h *ActorHandler) GetID() uuid.UUID {
+	return h.actor.GetID()
+}
+
+func (h *ActorHandler) GetKind() string {
+	return h.actor.GetKind()
+}
+
+func (h *ActorHandler) GetAddress() string {
+	return fmt.Sprintf("actor:%s", h.GetID())
+}
+
 func (h *ActorHandler) Stop() {
 	close(h.stop)
 }
@@ -219,6 +231,14 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 	}
 
 	actor := factory(ctx)
+
+	if s.registry.actors[actor.GetID()] != nil {
+		slog.Debug("Actor already exists with ID, returning existing handler", "actorID", actor.GetID())
+		return s.registry.actors[actor.GetID()], nil
+	}
+
+	opts = append(opts, WithSubscription(fmt.Sprintf("actor:%s", actor.GetID())))
+	opts = append(opts, WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())))
 
 	handler := NewActorHandler(s, actor, opts...)
 

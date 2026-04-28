@@ -1,5 +1,7 @@
 package system
 
+import "log/slog"
+
 func WithPreStartHook(hook Hook) HandlerOpt {
 	return func(h *ActorHandler, _ *System) {
 		if h.preStartHooks == nil {
@@ -45,9 +47,10 @@ func WithCrashHook(hook Hook) HandlerOpt {
 	}
 }
 
-// func WithSubscription(pattern string) HandlerOpt {
-// 	return func(h *ActorHandler, sys *System) {
-// 		registry := sys.registry
-// 		registry.Subscribe(pattern, h.actor.GetID())
-// 	}
-// }
+func WithSubscription(pattern string) HandlerOpt {
+	return func(h *ActorHandler, sys *System) {
+		if err := sys.Subscribe(pattern, h.actor.GetID()); err != nil {
+			slog.Warn("Failed to subscribe actor to pattern", "pattern", pattern, "actorID", h.actor.GetID(), "error", err)
+		}
+	}
+}

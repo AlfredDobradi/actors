@@ -30,6 +30,24 @@ func (h *TickerActor) HandleMessage(ctx context.Context, msg system.Message) sys
 	return nil
 }
 
+type TestRequest struct {
+	id    uuid.UUID
+	body  string
+	topic string
+}
+
+func (r *TestRequest) GetID() uuid.UUID {
+	return r.id
+}
+
+func (r *TestRequest) GetBody() []byte {
+	return []byte(r.body)
+}
+
+func (r *TestRequest) GetTopic() string {
+	return r.topic
+}
+
 func (h *TickerActor) Start(ctx context.Context) {
 	go func() {
 		for {
@@ -79,6 +97,16 @@ func main() {
 	if err != nil {
 		slog.Error("Failed to spawn actor", "error", err)
 		return
+	}
+
+	msg := &TestRequest{
+		id:    uuid.New(),
+		body:  "Hello, Actor!",
+		topic: handler.GetAddress(),
+	}
+
+	if err := sys.Route(msg); err != nil {
+		slog.Warn("Failed to route message", "id", msg.GetID(), "address", msg.GetTopic(), "error", err)
 	}
 
 	// Wait for interrupt signal (Ctrl+C)

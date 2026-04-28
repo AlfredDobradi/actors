@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -21,6 +22,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 )
+
+func persistentActorID() uuid.UUID {
+	// In a real implementation, this would likely be generated based on some stable identifier or retrieved from a database to ensure it remains consistent across restarts.
+	return uuid.MustParse("123e4567-e89b-12d3-a456-426614174000")
+}
 
 // ExampleActor is a simple implementation of the Actor interface for the example
 type ExampleActor struct {
@@ -49,9 +55,9 @@ func (e *ExampleActor) HandleMessage(ctx context.Context, msg system.Message) sy
 }
 
 // exampleActorFactory is the factory method for creating instances of ExampleActor
-func exampleActorFactory() system.Actor {
+func exampleActorFactory(_ context.Context) system.Actor {
 	return &ExampleActor{
-		ID: uuid.New(),
+		ID: persistentActorID(),
 	}
 }
 
@@ -81,6 +87,19 @@ func crashHook(ctx context.Context, actor system.Actor) error {
 	return nil
 }
 
+func spawnActor(sys *system.System) (*system.ActorHandler, error) {
+	ctx := context.Background()
+	return sys.Spawn(
+		ctx,
+		"ExampleActor",
+		system.WithPreStartHook(preStartHook),
+		system.WithPostStartHook(postStartHook),
+		system.WithPoisonedHook(poisonedHook),
+		system.WithTerminatedHook(terminatedHook),
+		system.WithCrashHook(crashHook),
+	)
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -91,38 +110,37 @@ func main() {
 	registry := system.NewRegistry()
 
 	// Register the ExampleActor factory with the registry
-	registry.RegisterFactory("ExampleActor", func(context.Context) system.Actor {
-		return exampleActorFactory()
-	})
+	registry.RegisterFactory("ExampleActor", exampleActorFactory)
 
 	sys := system.NewSystem(nil, registry)
 
 	// Spawn an instance of ExampleActor using the factory function stored in the registry.
 	// This is also where we can attach hooks to the actor's lifecycle events.
-	handler, err := sys.Spawn(
-		ctx,
-		"ExampleActor",
-		system.WithPreStartHook(preStartHook),
-		system.WithPostStartHook(postStartHook),
-		system.WithPoisonedHook(poisonedHook),
-		system.WithTerminatedHook(terminatedHook),
-		system.WithCrashHook(crashHook),
-	)
+	handlerFoo, err := spawnActor(sys)
 	if err != nil {
 		slog.Error("Failed to spawn actor", "error", err)
 		os.Exit(1)
 	}
 
-	// Send more messages than it will (probably) process to demonstrate the poisoned state (draining the channel and logging the messages we didn't process) and hooks
-	for range 100 {
-		handler.SendMessage(ctx, system.Message{ID: uuid.New(), Payload: []byte("hi")})
+	// Simulate trying to spawn another actor with the same ID to demonstrate that we return the existing handler instead of creating a new actor.
+	handlerBar, err := spawnActor(sys)
+	if err != nil {
+		slog.Error("Failed to spawn actor", "error", err)
+		os.Exit(1)
 	}
 
-	handler.Stop()
+	slog.Debug("actor spawned", "foo_address", fmt.Sprintf("%p", handlerFoo), "bar_address", fmt.Sprintf("%p", handlerBar))
+
+	// Send more messages than it will (probably) process to demonstrate the poisoned state (draining the channel and logging the messages we didn't process) and hooks
+	for range 100 {
+		handlerFoo.SendMessage(ctx, system.Message{ID: uuid.New(), Payload: []byte("hi")})
+	}
+
+	handlerFoo.Stop()
 
 	time.Sleep(200 * time.Millisecond)
 	// Send another message after stopping to demonstrate that it won't be processed.
-	handler.SendMessage(ctx, system.Message{ID: uuid.New(), Payload: []byte("this should not be handled")})
+	handlerFoo.SendMessage(ctx, system.Message{ID: uuid.New(), Payload: []byte("this should not be handled")})
 
-	handler.WaitForTermination()
+	handlerFoo.WaitForTermination()
 }
