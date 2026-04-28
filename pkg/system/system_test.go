@@ -11,11 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockActor for testing
+// MockActor is used for testing.
 type MockActor struct {
 	id           uuid.UUID
 	kind         string
 	messageCount int
+	messages     [][]byte
 	mu           sync.Mutex
 	// Control behavior
 	shouldCrash      bool
@@ -39,9 +40,16 @@ func (m *MockActor) GetKind() string {
 	return m.kind
 }
 
+func (m *MockActor) Start(ctx context.Context) {}
+
+func (m *MockActor) Stop(ctx context.Context) error {
+	return nil
+}
+
 func (m *MockActor) HandleMessage(ctx context.Context, msg system.Message) system.HandleError {
 	m.mu.Lock()
 	m.messageCount++
+	m.messages = append(m.messages, msg.Payload)
 	count := m.messageCount
 	m.mu.Unlock()
 
@@ -72,7 +80,7 @@ func (me *MockError) Error() string {
 	return me.msg
 }
 
-// HookTracker records the order and timing of hook executions
+// HookTracker records the order and timing of hook executions.
 type HookTracker struct {
 	mu    sync.Mutex
 	order []string
@@ -100,17 +108,17 @@ func (ht *HookTracker) CreateHook(hookName string) system.Hook {
 	}
 }
 
-// TestPreStartHookExecution verifies preStart hooks run before the actor starts
+// TestPreStartHookExecution verifies preStart hooks run before the actor starts.
 func TestPreStartHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithPreStartHook(tracker.CreateHook("preStart")),
@@ -131,16 +139,17 @@ func TestPreStartHookExecution(t *testing.T) {
 	}
 }
 
-// TestPostStartHookExecution verifies postStart hooks run after the actor starts
+// TestPostStartHookExecution verifies postStart hooks run after the actor starts.
 func TestPostStartHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithPostStartHook(tracker.CreateHook("postStart")),
@@ -165,16 +174,17 @@ func TestPostStartHookExecution(t *testing.T) {
 	}
 }
 
-// TestHookExecutionOrder verifies hooks execute in the correct order during normal termination
+// TestHookExecutionOrder verifies hooks execute in the correct order during normal termination.
 func TestHookExecutionOrder(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithPreStartHook(tracker.CreateHook("preStart")),
@@ -220,16 +230,17 @@ func TestHookExecutionOrder(t *testing.T) {
 	}
 }
 
-// TestPoisonedHookExecution verifies poisoned hooks run when Stop() is called
+// TestPoisonedHookExecution verifies poisoned hooks run when Stop() is called.
 func TestPoisonedHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
@@ -254,16 +265,17 @@ func TestPoisonedHookExecution(t *testing.T) {
 	}
 }
 
-// TestTerminatedHookExecution verifies terminated hooks always run on termination
+// TestTerminatedHookExecution verifies terminated hooks always run on termination.
 func TestTerminatedHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithTerminatedHook(tracker.CreateHook("terminated")),
@@ -287,7 +299,7 @@ func TestTerminatedHookExecution(t *testing.T) {
 	}
 }
 
-// TestCrashHookExecution verifies crash hooks run on unexpected termination
+// TestCrashHookExecution verifies crash hooks run on unexpected termination.
 func TestCrashHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
@@ -297,10 +309,11 @@ func TestCrashHookExecution(t *testing.T) {
 	actor.crashAfterCount = 0      // Crash on first message
 	actor.returnsRecovable = false // Make the crash non-recoverable
 
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithCrashHook(tracker.CreateHook("crash")),
@@ -332,16 +345,17 @@ func TestCrashHookExecution(t *testing.T) {
 	}
 }
 
-// TestCrashHookNotExecutedOnNormalStop verifies crash hook is NOT run on normal termination
+// TestCrashHookNotExecutedOnNormalStop verifies crash hook is NOT run on normal termination.
 func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithCrashHook(tracker.CreateHook("crash")),
@@ -362,16 +376,17 @@ func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 	}
 }
 
-// TestMultipleHooksOfSameType verifies multiple hooks of the same type all execute
+// TestMultipleHooksOfSameType verifies multiple hooks of the same type all execute.
 func TestMultipleHooksOfSameType(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
 	actor := NewMockActor("test")
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 		system.WithTerminatedHook(tracker.CreateHook("terminated1")),
@@ -396,7 +411,7 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 	}
 }
 
-// TestMessageProcessingBeforeCrash verifies messages are processed before crash detection
+// TestMessageProcessingBeforeCrash verifies messages are processed before crash detection.
 func TestMessageProcessingBeforeCrash(t *testing.T) {
 	ctx := context.Background()
 	actor := NewMockActor("test")
@@ -404,10 +419,11 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 	actor.crashAfterCount = 3      // Crash after 3 messages
 	actor.returnsRecovable = false // Make the crash non-recoverable
 
-	system.GetRegistry().Clear() // Clear registry to avoid interference from other tests
-	system.GetRegistry().Register(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	registry := system.NewRegistry()
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
+	sys := system.NewSystem(nil, registry)
 
-	handler, err := system.GetRegistry().Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
 	)

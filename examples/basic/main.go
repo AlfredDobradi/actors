@@ -35,6 +35,12 @@ func (e *ExampleActor) GetKind() string {
 	return "ExampleActor"
 }
 
+func (e *ExampleActor) Start(ctx context.Context) {}
+
+func (e *ExampleActor) Stop(ctx context.Context) error {
+	return nil
+}
+
 func (e *ExampleActor) HandleMessage(ctx context.Context, msg system.Message) system.HandleError {
 	spew.Dump(msg)
 	slog.Info("Handling message", "actorID", e.GetID(), "messageID", msg.ID, "payload", string(msg.Payload))
@@ -82,16 +88,18 @@ func main() {
 		Level: slog.LevelDebug,
 	})))
 
-	registry := system.GetRegistry()
+	registry := system.NewRegistry()
 
 	// Register the ExampleActor factory with the registry
-	registry.Register("ExampleActor", func(context.Context) system.Actor {
+	registry.RegisterFactory("ExampleActor", func(context.Context) system.Actor {
 		return exampleActorFactory()
 	})
 
+	sys := system.NewSystem(nil, registry)
+
 	// Spawn an instance of ExampleActor using the factory function stored in the registry.
 	// This is also where we can attach hooks to the actor's lifecycle events.
-	handler, err := registry.Spawn(
+	handler, err := sys.Spawn(
 		ctx,
 		"ExampleActor",
 		system.WithPreStartHook(preStartHook),
