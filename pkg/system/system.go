@@ -19,7 +19,8 @@ import (
 type ContextKey string
 
 const (
-	ContextKeyError ContextKey = "error"
+	ContextKeyError  ContextKey = "error"
+	ContextKeySender ContextKey = "sender"
 )
 
 type ActorFactory func(ctx context.Context) Actor
@@ -27,6 +28,10 @@ type ActorFactory func(ctx context.Context) Actor
 type HandlerOpt func(*ActorHandler, *System)
 
 type ActorOpt func(Actor)
+
+type MessageConsumer interface {
+	Inbox() chan any
+}
 
 type Message struct {
 	ID      uuid.UUID
@@ -45,9 +50,10 @@ type Actor interface {
 type ActorHandler struct {
 	actor Actor
 
-	inbox chan Message
-	stop  chan struct{}
-	done  chan struct{}
+	inbox  chan Message
+	outbox chan any
+	stop   chan struct{}
+	done   chan struct{}
 
 	poisoned atomic.Bool
 
@@ -60,10 +66,12 @@ type ActorHandler struct {
 
 func NewActorHandler(sys *System, actor Actor, opts ...HandlerOpt) *ActorHandler {
 	handler := &ActorHandler{
-		actor: actor,
-		inbox: make(chan Message, 100), // Buffered channel for messages
-		stop:  make(chan struct{}),
-		done:  make(chan struct{}),
+		actor:  actor,
+		inbox:  make(chan Message, 100), // Buffered channel for messages
+		outbox: sys.bus.Inbox(),
+
+		stop: make(chan struct{}),
+		done: make(chan struct{}),
 
 		preStartHooks:   NewHookCollection(HookPreStart),
 		postStartHooks:  NewHookCollection(HookPostStart),
@@ -179,14 +187,12 @@ type System struct {
 	transport any // TODO Add transport layer for external communication
 }
 
-func NewSystem(bus *Bus, registry *Registry) *System {
-	if bus == nil {
-		bus = NewBus()
-	}
-
+func NewSystem(registry *Registry) *System {
 	if registry == nil {
 		registry = NewRegistry()
 	}
+
+	bus := NewBus()
 
 	s := &System{
 		bus:      bus,
@@ -223,12 +229,18 @@ func (s *System) Route(msg RouteableMessage) error {
 	return s.bus.Route(msg)
 }
 
+func (s *System) Send(msg RouteableMessage) {
+	s.bus.Inbox() <- msg
+}
+
 // TODO Unexpose this method once we have better communication options.
 func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*ActorHandler, error) {
 	factory, exists := s.registry.factories[kind]
 	if !exists {
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
 	}
+
+	ctx = context.WithValue(ctx, ContextKeySender, s.bus)
 
 	actor := factory(ctx)
 

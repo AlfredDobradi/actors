@@ -8,26 +8,60 @@ import (
 )
 
 type RouteableMessage interface {
+	GetSender() uuid.UUID
 	GetID() uuid.UUID
 	GetTopic() string
 	GetBody() []byte
 }
 
 type Bus struct {
-	inbox     chan any
-	subscribe chan Subscription
+	inbox chan any
+	stop  chan struct{}
 
 	subscriptions []Subscription
 	routeFn       func(actorID uuid.UUID, msg RouteableMessage) error
 }
 
 func NewBus() *Bus {
-	return &Bus{
+	bus := &Bus{
 		inbox:         make(chan any, 100),
-		subscribe:     make(chan Subscription, 100),
+		stop:          make(chan struct{}),
 		subscriptions: make([]Subscription, 0),
 		routeFn:       nil,
 	}
+
+	go bus.Start()
+
+	return bus
+}
+
+func (b *Bus) Inbox() chan any {
+	if b.inbox == nil {
+		b.inbox = make(chan any, 100)
+	}
+	return b.inbox
+}
+
+func (b *Bus) Start() {
+	go func() {
+		for {
+			select {
+			case msg := <-b.inbox:
+				if routeableMsg, ok := msg.(RouteableMessage); ok {
+					if err := b.Route(routeableMsg); err != nil {
+						slog.Error("Failed to route message from bus inbox", "messageID", routeableMsg.GetID(), "error", err)
+					}
+				}
+			case <-b.stop:
+				slog.Debug("Bus stopping")
+				return
+			}
+		}
+	}()
+}
+
+func (b *Bus) Stop() {
+	close(b.stop)
 }
 
 func (b *Bus) Route(msg RouteableMessage) error {

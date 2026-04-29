@@ -16,14 +16,16 @@ import (
 const mockBusActorKind = "MockBusActor"
 
 type MockMessage struct {
+	Sender  uuid.UUID
 	ID      uuid.UUID
 	Payload []byte
 	Topic   string
 }
 
-func (m *MockMessage) GetID() uuid.UUID { return m.ID }
-func (m *MockMessage) GetBody() []byte  { return m.Payload }
-func (m *MockMessage) GetTopic() string { return m.Topic }
+func (m *MockMessage) GetID() uuid.UUID     { return m.ID }
+func (m *MockMessage) GetBody() []byte      { return m.Payload }
+func (m *MockMessage) GetTopic() string     { return m.Topic }
+func (m *MockMessage) GetSender() uuid.UUID { return m.Sender }
 
 type MockBusActor struct {
 	ID       uuid.UUID
@@ -60,8 +62,7 @@ func TestRouting(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
-	bus := system.NewBus()
-	sys := system.NewSystem(bus, registry)
+	sys := system.NewSystem(registry)
 
 	handlerFoo, err := sys.Spawn(context.Background(), mockBusActorKind)
 	if err != nil {

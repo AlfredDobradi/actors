@@ -112,7 +112,7 @@ func main() {
 	// Register the ExampleActor factory with the registry
 	registry.RegisterFactory("ExampleActor", exampleActorFactory)
 
-	sys := system.NewSystem(nil, registry)
+	sys := system.NewSystem(registry)
 
 	// Spawn an instance of ExampleActor using the factory function stored in the registry.
 	// This is also where we can attach hooks to the actor's lifecycle events.

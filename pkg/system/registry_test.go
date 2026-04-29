@@ -16,8 +16,7 @@ func TestRegistrySpawn(t *testing.T) {
 		return &MockActor{id: uuid.New(), kind: "testActor"}
 	})
 
-	bus := system.NewBus()
-	sys := system.NewSystem(bus, registry)
+	sys := system.NewSystem(registry)
 
 	ctx := context.Background()
 	handler, err := sys.Spawn(ctx, "testActor")
