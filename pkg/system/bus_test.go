@@ -2,6 +2,7 @@ package system_test
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -15,18 +16,6 @@ import (
 
 const mockBusActorKind = "MockBusActor"
 
-type MockMessage struct {
-	Sender  uuid.UUID
-	ID      uuid.UUID
-	Payload []byte
-	Topic   string
-}
-
-func (m *MockMessage) GetID() uuid.UUID     { return m.ID }
-func (m *MockMessage) GetBody() []byte      { return m.Payload }
-func (m *MockMessage) GetTopic() string     { return m.Topic }
-func (m *MockMessage) GetSender() uuid.UUID { return m.Sender }
-
 type MockBusActor struct {
 	ID       uuid.UUID
 	mx       *sync.Mutex
@@ -37,10 +26,10 @@ func (a *MockBusActor) GetID() uuid.UUID               { return a.ID }
 func (a *MockBusActor) GetKind() string                { return "MockBusActor" }
 func (a *MockBusActor) Start(ctx context.Context)      {}
 func (a *MockBusActor) Stop(ctx context.Context) error { return nil }
-func (a *MockBusActor) HandleMessage(ctx context.Context, msg system.Message) system.HandleError {
+func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	a.mx.Lock()
-	slog.Debug("MockBusActor handling message", "actorID", a.GetID(), "messageID", msg.ID, "payload", string(msg.Payload))
-	a.messages = append(a.messages, string(msg.Payload))
+	slog.Debug("MockBusActor handling message", "actorID", a.GetID(), "messageID", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))
+	a.messages = append(a.messages, fmt.Sprintf("%v", msg.GetBody()))
 	a.mx.Unlock()
 
 	return nil
@@ -82,22 +71,22 @@ func TestRouting(t *testing.T) {
 		t.Fatalf("Failed to subscribe actor: %v", err)
 	}
 
-	msgFoo := &MockMessage{
-		ID:      uuid.New(),
-		Payload: []byte("foo"),
-		Topic:   "foo",
+	msgFoo := &system.Message{
+		ID:        uuid.New(),
+		Payload:   "foo",
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "foo"},
 	}
 
-	msgBar := &MockMessage{
-		ID:      uuid.New(),
-		Payload: []byte("bar"),
-		Topic:   "bar",
+	msgBar := &system.Message{
+		ID:        uuid.New(),
+		Payload:   "bar",
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "bar"},
 	}
 
-	msgFoobar := &MockMessage{
-		ID:      uuid.New(),
-		Payload: []byte("foobar"),
-		Topic:   "foobar",
+	msgFoobar := &system.Message{
+		ID:        uuid.New(),
+		Payload:   []byte("foobar"),
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "foobar"},
 	}
 
 	wg := &sync.WaitGroup{}
@@ -107,7 +96,7 @@ func TestRouting(t *testing.T) {
 	cmx := &sync.Mutex{}
 	counts := make(map[string]int)
 	start := time.Now()
-	msgs := []*MockMessage{msgFoo, msgBar, msgFoobar}
+	msgs := []*system.Message{msgFoo, msgBar, msgFoobar}
 
 	for i := 0; i < 1000; i++ {
 		wg.Add(1)
@@ -116,13 +105,13 @@ func TestRouting(t *testing.T) {
 			which := i % 3
 
 			start := time.Now()
-			require.NoError(t, sys.Route(msgs[which]))
+			require.NoError(t, sys.Route(context.Background(), msgs[which]))
 			tmx.Lock()
 			times = append(times, time.Since(start))
 			tmx.Unlock()
 
 			cmx.Lock()
-			counts[msgs[which].Topic]++
+			counts[msgs[which].Recipient.Subject]++
 			cmx.Unlock()
 		}(i)
 	}
@@ -154,4 +143,8 @@ func TestRouting(t *testing.T) {
 
 	handlerFoo.WaitForTermination()
 	handlerBar.WaitForTermination()
+}
+
+func TestRequestReply(t *testing.T) {
+
 }

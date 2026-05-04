@@ -1,17 +1,67 @@
 package system
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-type RouteableMessage interface {
-	GetSender() uuid.UUID
-	GetID() uuid.UUID
-	GetTopic() string
-	GetBody() []byte
+type RecipientKind string
+
+const (
+	RecipientKindTopic RecipientKind = "topic"
+	RecipientKindActor RecipientKind = "actor"
+)
+
+type Recipient struct {
+	Kind    RecipientKind
+	Subject string
+}
+
+func (r Recipient) String() string {
+	return fmt.Sprintf("%s:%s", r.Kind, r.Subject)
+}
+
+// Message represents a message that can be sent between actors.
+type Message struct {
+	ID              uuid.UUID
+	Sender          uuid.UUID
+	Payload         any
+	Recipient       Recipient
+	ResponseTo      uuid.UUID
+	ResponseChannel chan *Message
+}
+
+func (m *Message) GetID() uuid.UUID         { return m.ID }
+func (m *Message) GetSender() uuid.UUID     { return m.Sender }
+func (m *Message) GetBody() any             { return m.Payload }
+func (m *Message) GetRecipient() Recipient  { return m.Recipient }
+func (m *Message) GetResponseTo() uuid.UUID { return m.ResponseTo }
+func (m *Message) IsRequest() bool          { return m.ResponseChannel != nil }
+func (m *Message) Respond(sender uuid.UUID, payload any) error {
+	if m.ResponseChannel == nil {
+		slog.Debug("Message does not expect a response, ignoring respond call", "messageID", m.GetID())
+		return nil
+	}
+
+	response := &Message{
+		ID:              uuid.New(),
+		Sender:          sender,
+		Payload:         payload,
+		Recipient:       Recipient{Kind: RecipientKindActor, Subject: m.GetSender().String()},
+		ResponseTo:      m.GetID(),
+		ResponseChannel: nil,
+	}
+
+	slog.Debug("Sending response message", "messageID", response.GetID(), "responseTo", response.GetResponseTo(), "payload", fmt.Sprintf("%v", payload))
+
+	m.ResponseChannel <- response
+	return nil
 }
 
 type Bus struct {
@@ -19,7 +69,7 @@ type Bus struct {
 	stop  chan struct{}
 
 	subscriptions []Subscription
-	routeFn       func(actorID uuid.UUID, msg RouteableMessage) error
+	routeFn       func(actorID uuid.UUID, msg *Message) error
 }
 
 func NewBus() *Bus {
@@ -47,9 +97,12 @@ func (b *Bus) Start() {
 		for {
 			select {
 			case msg := <-b.inbox:
-				if routeableMsg, ok := msg.(RouteableMessage); ok {
-					if err := b.Route(routeableMsg); err != nil {
-						slog.Error("Failed to route message from bus inbox", "messageID", routeableMsg.GetID(), "error", err)
+				if routeableMsg, ok := msg.(*Message); ok {
+					spanID := uuid.New()
+					spanCtx := context.WithValue(context.Background(), ContextKeySpanID, spanID)
+					if err := b.Route(spanCtx, routeableMsg); err != nil {
+						ctxLogger := slog.With("span_id", spanID)
+						ctxLogger.Error("Failed to route message from bus inbox", "messageID", routeableMsg.GetID(), "error", err)
 					}
 				}
 			case <-b.stop:
@@ -64,19 +117,88 @@ func (b *Bus) Stop() {
 	close(b.stop)
 }
 
-func (b *Bus) Route(msg RouteableMessage) error {
+func (b *Bus) Publish(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) error {
+	msg := &Message{
+		ID:              uuid.New(),
+		Sender:          sender,
+		Payload:         payload,
+		Recipient:       recipient,
+		ResponseChannel: nil,
+	}
+
+	return b.Route(ctx, msg)
+}
+
+func (b *Bus) Request(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) (any, error) {
+	spanID := ctx.Value(ContextKeySpanID).(uuid.UUID)
+	if spanID == uuid.Nil {
+		spanID = uuid.New()
+		ctx = context.WithValue(ctx, ContextKeySpanID, spanID)
+	}
+	deadlineCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	respondTo := make(chan *Message, 1)
+	isDone := make(chan struct{})
+	var response any
+
+	ctxLogger := slog.With("span_id", spanID)
+
+	ctxLogger.Debug("created response channel")
+
+	go func(c context.Context) {
+		select {
+		case res := <-respondTo:
+			ctxLogger.Debug("Received response to request", "sender", res.GetSender(), "recipient", res.GetRecipient().String(), "responseID", res.GetID(), "responseTo", res.GetResponseTo(), "payload", fmt.Sprintf("%v", res.GetBody()))
+			response = res.GetBody()
+		case <-c.Done():
+			ctxLogger.Warn("Request timed out", "sender", sender, "recipient", recipient.String())
+		}
+		close(isDone)
+	}(deadlineCtx)
+
+	msg := &Message{
+		ID:              uuid.New(),
+		Sender:          sender,
+		Payload:         payload,
+		Recipient:       recipient,
+		ResponseChannel: respondTo,
+	}
+
+	ctxLogger.Debug("created request message", "messageID", msg.GetID(), "sender", sender, "recipient", recipient.String())
+
+	if err := b.Route(ctx, msg); err != nil {
+		return nil, err
+	}
+
+	ctxLogger.Debug("sent request message", "messageID", msg.GetID(), "sender", sender, "recipient", recipient.String())
+
+	<-isDone
+
+	ctxLogger.Debug("Request handling complete", "sender", sender, "recipient", recipient.String())
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("request timed out")
+	}
+
+	return response, nil
+}
+
+func (b *Bus) Route(ctx context.Context, msg *Message) error {
 	for _, sub := range b.subscriptions {
-		matches := sub.pattern.MatchString(msg.GetTopic())
-		slog.Debug("Routing message", "messageID", msg.GetID(), "topic", msg.GetTopic(), "subscriptionPattern", sub.pattern.String(), "matches", matches)
+		subject := strings.TrimPrefix(msg.GetRecipient().String(), "topic:")
+		matches := sub.pattern.MatchString(subject)
+		ctxLogger := slog.With("span_id", ctx.Value(ContextKeySpanID))
+		ctxLogger.Debug("Routing message", "messageID", msg.GetID(), "recipient", msg.GetRecipient().String(), "subscriptionPattern", sub.pattern.String(), "matches", matches)
 		if matches {
 			if b.routeFn != nil {
 				err := b.routeFn(sub.actorID, msg)
 				if err != nil {
-					slog.Error("Failed to route message", "messageID", msg.GetID(), "error", err)
+					ctxLogger.Error("Failed to route message", "messageID", msg.GetID(), "error", err)
 					return err
 				}
 			} else {
-				slog.Warn("No routing function defined, message will not be delivered", "messageID", msg.GetID())
+				ctxLogger.Warn("No routing function defined, message will not be delivered", "messageID", msg.GetID())
 			}
 		}
 	}
@@ -84,7 +206,7 @@ func (b *Bus) Route(msg RouteableMessage) error {
 	return nil
 }
 
-func (b *Bus) SetRouteFunction(routeFn func(actorID uuid.UUID, msg RouteableMessage) error) {
+func (b *Bus) SetRouteFunction(routeFn func(actorID uuid.UUID, msg *Message) error) {
 	b.routeFn = routeFn
 }
 

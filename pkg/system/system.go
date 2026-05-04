@@ -19,23 +19,22 @@ import (
 type ContextKey string
 
 const (
-	ContextKeyError  ContextKey = "error"
-	ContextKeySender ContextKey = "sender"
+	ContextKeyError    ContextKey = "error"
+	ContextKeySender   ContextKey = "sender"
+	ContextKeySenderFn ContextKey = "sender_fn"
+	ContextKeySpanID   ContextKey = "span_id"
 )
 
 type ActorFactory func(ctx context.Context) Actor
+type SenderFunc func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error)
 
 type HandlerOpt func(*ActorHandler, *System)
 
 type ActorOpt func(Actor)
 
 type MessageConsumer interface {
-	Inbox() chan any
-}
-
-type Message struct {
-	ID      uuid.UUID
-	Payload []byte
+	Publish(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) error
+	Request(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) error
 }
 
 type Actor interface {
@@ -44,16 +43,15 @@ type Actor interface {
 
 	Start(context.Context)
 	Stop(context.Context) error
-	HandleMessage(context.Context, Message) HandleError
+	HandleMessage(context.Context, *Message) HandleError
 }
 
 type ActorHandler struct {
 	actor Actor
 
-	inbox  chan Message
-	outbox chan any
-	stop   chan struct{}
-	done   chan struct{}
+	inbox chan *Message
+	stop  chan struct{}
+	done  chan struct{}
 
 	poisoned atomic.Bool
 
@@ -66,9 +64,8 @@ type ActorHandler struct {
 
 func NewActorHandler(sys *System, actor Actor, opts ...HandlerOpt) *ActorHandler {
 	handler := &ActorHandler{
-		actor:  actor,
-		inbox:  make(chan Message, 100), // Buffered channel for messages
-		outbox: sys.bus.Inbox(),
+		actor: actor,
+		inbox: make(chan *Message, 100), // Buffered channel for messages
 
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
@@ -138,7 +135,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			}
 
 			// Handle incoming message
-			slog.Debug("Actor received message", "actor_id", h.actor.GetID(), "message_id", msg.ID, "payload", string(msg.Payload))
+			slog.Debug("Actor received message", "actor_id", h.actor.GetID(), "message_id", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))
 			handleError = h.actor.HandleMessage(ctx, msg)
 			if handleError != nil && !handleError.IsRecoverable() {
 				return
@@ -157,7 +154,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			}
 
 			for m := range h.inbox {
-				slog.Warn("Actor is poisoned, ignoring message", "actor_id", h.actor.GetID(), "message", string(m.Payload))
+				slog.Warn("Actor is poisoned, ignoring message", "actor_id", h.actor.GetID(), "message", fmt.Sprintf("%v", m.GetBody()))
 			}
 
 			// Handle actor termination
@@ -170,7 +167,7 @@ func (h *ActorHandler) WaitForTermination() {
 	<-h.done
 }
 
-func (h *ActorHandler) SendMessage(ctx context.Context, msg Message) {
+func (h *ActorHandler) SendMessage(ctx context.Context, msg *Message) {
 	if h.poisoned.Load() {
 		slog.Warn("Cannot send message to poisoned actor", "actor_id", h.actor.GetID())
 		return
@@ -199,18 +196,15 @@ func NewSystem(registry *Registry) *System {
 		registry: registry,
 	}
 
-	bus.SetRouteFunction(func(actorID uuid.UUID, msg RouteableMessage) error {
-		slog.Debug("Routing message", "actorID", actorID, "messageID", msg.GetID(), "payload", string(msg.GetBody()))
+	bus.SetRouteFunction(func(actorID uuid.UUID, msg *Message) error {
+		slog.Debug("Routing message", "actorID", actorID, "messageID", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))
 		handler, exists := registry.actors[actorID]
 		if !exists {
 			slog.Warn("No actor found for subscription", "actorID", actorID)
 			return nil
 		}
 
-		handler.SendMessage(context.Background(), Message{
-			ID:      msg.GetID(),
-			Payload: msg.GetBody(),
-		})
+		handler.SendMessage(context.Background(), msg)
 		return nil
 	})
 
@@ -225,12 +219,20 @@ func (s *System) Subscribe(pattern string, actorID uuid.UUID) error {
 	return s.bus.Subscribe(pattern, actorID)
 }
 
-func (s *System) Route(msg RouteableMessage) error {
-	return s.bus.Route(msg)
+func (s *System) Route(ctx context.Context, msg *Message) error {
+	return s.bus.Route(ctx, msg)
 }
 
-func (s *System) Send(msg RouteableMessage) {
+func (s *System) Send(ctx context.Context, msg *Message) {
 	s.bus.Inbox() <- msg
+}
+
+func (s *System) Request(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) (any, error) {
+	return s.bus.Request(ctx, sender, recipient, payload)
+}
+
+func (s *System) Publish(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) error {
+	return s.bus.Publish(ctx, sender, recipient, payload)
 }
 
 // TODO Unexpose this method once we have better communication options.
@@ -240,7 +242,15 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
 	}
 
-	ctx = context.WithValue(ctx, ContextKeySender, s.bus)
+	senderFn := SenderFunc(func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error) {
+		if request {
+			return s.bus.Request(ctx, sender, recipient, payload)
+		}
+
+		err := s.bus.Publish(ctx, sender, recipient, payload)
+		return nil, err
+	})
+	ctx = context.WithValue(ctx, ContextKeySenderFn, senderFn)
 
 	actor := factory(ctx)
 

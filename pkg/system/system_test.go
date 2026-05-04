@@ -16,7 +16,7 @@ type MockActor struct {
 	id           uuid.UUID
 	kind         string
 	messageCount int
-	messages     [][]byte
+	messages     []any
 	mu           sync.Mutex
 	// Control behavior
 	shouldCrash      bool
@@ -46,10 +46,10 @@ func (m *MockActor) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockActor) HandleMessage(ctx context.Context, msg system.Message) system.HandleError {
+func (m *MockActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	m.mu.Lock()
 	m.messageCount++
-	m.messages = append(m.messages, msg.Payload)
+	m.messages = append(m.messages, msg.GetBody())
 	count := m.messageCount
 	m.mu.Unlock()
 
@@ -322,9 +322,10 @@ func TestCrashHookExecution(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send a message to trigger the crash
-	msg := system.Message{
-		ID:      uuid.New(),
-		Payload: []byte("test"),
+	msg := &system.Message{
+		ID:        uuid.New(),
+		Payload:   []byte("test"),
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "test"},
 	}
 	handler.SendMessage(ctx, msg)
 
@@ -431,9 +432,10 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 
 	// Send 2 messages (should be processed normally)
 	for i := 0; i < 2; i++ {
-		handler.SendMessage(ctx, system.Message{
-			ID:      uuid.New(),
-			Payload: []byte("msg"),
+		handler.SendMessage(ctx, &system.Message{
+			ID:        uuid.New(),
+			Payload:   []byte("msg"),
+			Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "test"},
 		})
 	}
 
@@ -444,9 +446,10 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 	}
 
 	// Send message that triggers crash
-	handler.SendMessage(ctx, system.Message{
-		ID:      uuid.New(),
-		Payload: []byte("crash"),
+	handler.SendMessage(ctx, &system.Message{
+		ID:        uuid.New(),
+		Payload:   []byte("crash"),
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "test"},
 	})
 
 	time.Sleep(100 * time.Millisecond)
