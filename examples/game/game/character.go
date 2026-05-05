@@ -4,11 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 
 	"github.com/alfreddobradi/actors/examples/game/telemetry"
 	"github.com/google/uuid"
 )
+
+const (
+	xpExponent = 1.7
+)
+
+func xpForLevel(level int) int {
+	return int(math.Floor(math.Pow(float64(level-1), xpExponent) * 100))
+}
 
 const (
 	StatusIdle uint8 = iota
@@ -41,6 +50,11 @@ func (inv *Inventory) AddResource(resource Resource, quantity int) {
 	inv.resources[resource.Name] += quantity
 }
 
+type Tavern struct {
+	ID   uuid.UUID
+	Name string
+}
+
 type Character struct {
 	ID         uuid.UUID
 	Name       string
@@ -50,7 +64,8 @@ type Character struct {
 	Cooldown   int
 	Action     Action
 
-	Inventory
+	Inventory Inventory
+	Tavern    *Tavern
 }
 
 func NewCharacter(name string) Character {
@@ -62,6 +77,13 @@ func NewCharacter(name string) Character {
 		Status:     StatusIdle,
 		Cooldown:   0,
 		Inventory:  NewInventory(),
+	}
+}
+
+func (c *Character) GainExperience(amount int) {
+	c.Experience += amount
+	for i := 0; c.Experience >= xpForLevel(i+1); i++ {
+		c.Level = i + 1
 	}
 }
 

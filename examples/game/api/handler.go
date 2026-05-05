@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
@@ -20,7 +20,7 @@ func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := actor.GetCharacterRequest{Name: httpReq.Name}
+	req := model.GetCharacterRequest{Name: httpReq.Name}
 
 	ctx := context.WithValue(r.Context(), system.ContextKeySpanID, uuid.New())
 
@@ -42,7 +42,7 @@ func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	characterReq := actor.GetCharacterRequest{Name: httpReq.CharacterName}
+	characterReq := model.GetCharacterRequest{Name: httpReq.CharacterName}
 
 	characterData, err := s.sys.Request(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, characterReq)
 	if err != nil {
@@ -71,7 +71,7 @@ func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startReq := actor.StartActionRequest{
+	startReq := model.StartActionRequest{
 		CharacterID: characterData.(*game.Character).ID,
 		Action:      action,
 	}
@@ -94,7 +94,7 @@ func (s *Server) handleStopAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	characterReq := actor.GetCharacterRequest{Name: httpReq.CharacterName}
+	characterReq := model.GetCharacterRequest{Name: httpReq.CharacterName}
 
 	characterData, err := s.sys.Request(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, characterReq)
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *Server) handleStopAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stopReq := actor.StopActionRequest{
+	stopReq := model.StopActionRequest{
 		CharacterID: characterData.(*game.Character).ID,
 	}
 

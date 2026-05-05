@@ -11,6 +11,7 @@ import (
 	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/api"
 	"github.com/alfreddobradi/actors/examples/game/logging"
+	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 )
@@ -43,7 +44,7 @@ func main() {
 		return
 	}
 
-	if err := sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: topicCharacter}, actor.CreateCharacterRequest{Name: "Alice"}); err != nil {
+	if err := sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: topicCharacter}, model.CreateCharacterRequest{Name: "Alice"}); err != nil {
 		slog.Error("Failed to publish create character message", "error", err)
 		return
 	}
@@ -66,10 +67,6 @@ func main() {
 	handlerTicker.WaitForTermination()
 
 	time.Sleep(2 * time.Second) // Wait for ticker to stop before stopping character store
-
-	if err := sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: topicCharacter}, actor.GetCharacterRequest{Name: "Alice"}); err != nil {
-		slog.Error("Failed to publish get character message", "error", err)
-	}
 
 	characterStore.Stop()
 	characterStore.WaitForTermination()

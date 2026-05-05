@@ -19,18 +19,16 @@ import (
 type ContextKey string
 
 const (
-	ContextKeyError    ContextKey = "error"
-	ContextKeySender   ContextKey = "sender"
-	ContextKeySenderFn ContextKey = "sender_fn"
-	ContextKeySpanID   ContextKey = "span_id"
+	ContextKeyError         ContextKey = "error"
+	ContextKeySender        ContextKey = "sender"
+	ContextKeySenderFn      ContextKey = "sender_fn"
+	ContextKeySpanID        ContextKey = "span_id"
+	ContextKeyFactoryParams ContextKey = "factory_params"
 )
 
 type ActorFactory func(ctx context.Context) Actor
 type SenderFunc func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error)
-
 type HandlerOpt func(*ActorHandler, *System)
-
-type ActorOpt func(Actor)
 
 type MessageConsumer interface {
 	Publish(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) error
@@ -277,4 +275,9 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 	s.registry.actors[actor.GetID()] = handler
 
 	return handler, nil
+}
+
+func (s *System) SpawnWithParams(ctx context.Context, kind string, params any, opts ...HandlerOpt) (*ActorHandler, error) {
+	ctx = context.WithValue(ctx, ContextKeyFactoryParams, params)
+	return s.Spawn(ctx, kind, opts...)
 }

@@ -36,7 +36,7 @@ func (f *FightAction) Execute(ctx context.Context, character *Character) {
 	success := enemyRoll <= character.Level
 	ctxLogger.Info("Resolving fight", "characterLevel", character.Level, "enemyLevelRoll", enemyRoll, "success", success)
 	if success {
-		character.Experience += 10
+		character.GainExperience(10)
 		ctxLogger.Debug("Added experience to character", "newExperience", character.Experience)
 	}
 }
@@ -63,7 +63,7 @@ func (g *GatherAction) Execute(ctx context.Context, character *Character) {
 		batchSize := g.Resource.Batch(ctx)
 		character.Inventory.AddResource(g.Resource, batchSize)
 		experienceGained := int(float64(batchSize) * g.Resource.Experience)
-		character.Experience += experienceGained
+		character.GainExperience(experienceGained)
 		ctxLogger.Info("Successfully gathered resource", "resource", g.Resource.Name, "quantity", batchSize, "experienceGained", experienceGained, "newExperience", character.Experience)
 	}
 }

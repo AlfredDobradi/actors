@@ -7,27 +7,11 @@ import (
 	"sync"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/examples/game/telemetry"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 )
-
-type CreateCharacterRequest struct {
-	Name string
-}
-
-type GetCharacterRequest struct {
-	Name string
-}
-
-type StartActionRequest struct {
-	CharacterID uuid.UUID
-	Action      game.Action
-}
-
-type StopActionRequest struct {
-	CharacterID uuid.UUID
-}
 
 type CharacterStore struct {
 	mx         *sync.Mutex
@@ -46,13 +30,13 @@ func (h *CharacterStore) HandleMessage(ctx context.Context, msg *system.Message)
 	switch payload := msg.GetBody().(type) {
 	case Tick:
 		h.processTick(ctx)
-	case StartActionRequest:
+	case model.StartActionRequest:
 		h.startAction(ctx, payload.CharacterID, payload.Action)
-	case StopActionRequest:
+	case model.StopActionRequest:
 		h.stopAction(ctx, payload.CharacterID)
-	case CreateCharacterRequest:
+	case model.CreateCharacterRequest:
 		h.addCharacter(ctx, payload)
-	case GetCharacterRequest:
+	case model.GetCharacterRequest:
 		character := h.getCharacter(ctx, payload)
 		if character != nil {
 			slog.Info("Character found", "actorID", h.GetID(), "characterID", character.ID, "characterName", character.Name, "characterLevel", character.Level, "characterExperience", character.Experience, "characterStatus", character.Status)
@@ -99,7 +83,7 @@ func (h *CharacterStore) processTick(ctx context.Context) {
 	}
 }
 
-func (h *CharacterStore) addCharacter(ctx context.Context, character CreateCharacterRequest) {
+func (h *CharacterStore) addCharacter(ctx context.Context, character model.CreateCharacterRequest) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 
 	ctxLogger := slog.With("span_id", spanID)
@@ -114,7 +98,7 @@ func (h *CharacterStore) addCharacter(ctx context.Context, character CreateChara
 	ctxLogger.Info("Character added to store", "actorID", h.GetID(), "characterID", ch.ID)
 }
 
-func (h *CharacterStore) getCharacter(ctx context.Context, request GetCharacterRequest) *game.Character {
+func (h *CharacterStore) getCharacter(ctx context.Context, request model.GetCharacterRequest) *game.Character {
 	spanID := telemetry.SpanIDFromContext(ctx)
 
 	ctxLogger := slog.With("span_id", spanID)
