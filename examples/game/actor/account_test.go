@@ -13,7 +13,7 @@ func TestAccountActorFactory(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory("AccountActor", accountActorFactory)
 
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 	params := AccountActorParams{Name: "TestAccount"}
 	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
 	require.NoError(t, err)

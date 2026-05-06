@@ -1,30 +1,31 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/examples/game/paseto"
+	"github.com/alfreddobradi/actors/examples/game/repository"
+	"github.com/alfreddobradi/actors/examples/game/telemetry"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 )
 
 func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
 	decoder := json.NewDecoder(r.Body)
-	var httpReq GetCharacterRequest
-	if err := decoder.Decode(&httpReq); err != nil {
+	var req model.GetCharacterRequest
+	if err := decoder.Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+	defer r.Body.Close()
 
-	req := model.GetCharacterRequest{Name: httpReq.Name}
-
-	ctx := context.WithValue(r.Context(), system.ContextKeySpanID, uuid.New())
-
-	characterData, err := s.sys.Request(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, req)
+	characterData, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, req)
 	if err != nil {
 		http.Error(w, "Failed to request character", http.StatusInternalServerError)
 		return
@@ -34,21 +35,14 @@ func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
-	ctx := context.WithValue(r.Context(), system.ContextKeySpanID, uuid.New())
+	span := telemetry.SpanFromRequest(r)
 	decoder := json.NewDecoder(r.Body)
-	var httpReq StartActionRequest
+	var httpReq model.StartActionRequest
 	if err := decoder.Decode(&httpReq); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-
-	characterReq := model.GetCharacterRequest{Name: httpReq.CharacterName}
-
-	characterData, err := s.sys.Request(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, characterReq)
-	if err != nil {
-		http.Error(w, "Failed to request character", http.StatusInternalServerError)
-		return
-	}
+	defer r.Body.Close()
 
 	var action game.Action
 	switch httpReq.Action {
@@ -71,12 +65,18 @@ func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startReq := model.StartActionRequest{
-		CharacterID: characterData.(*game.Character).ID,
-		Action:      action,
+	characterID, err := uuid.Parse(httpReq.CharacterID)
+	if err != nil {
+		http.Error(w, "Invalid character ID", http.StatusBadRequest)
+		return
 	}
 
-	if err := s.sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, startReq); err != nil {
+	message := model.StartActionMessage{
+		CharacterID: characterID,
+		Action:      action,
+		Context:     httpReq.Context,
+	}
+	if err := s.sys.Publish(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, message); err != nil {
 		http.Error(w, "Failed to request character action start", http.StatusInternalServerError)
 		return
 	}
@@ -86,31 +86,112 @@ func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStopAction(w http.ResponseWriter, r *http.Request) {
-	ctx := context.WithValue(r.Context(), system.ContextKeySpanID, uuid.New())
+	span := telemetry.SpanFromRequest(r)
 	decoder := json.NewDecoder(r.Body)
-	var httpReq StopActionRequest
+	var httpReq model.StopActionRequest
 	if err := decoder.Decode(&httpReq); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+	defer r.Body.Close()
 
-	characterReq := model.GetCharacterRequest{Name: httpReq.CharacterName}
-
-	characterData, err := s.sys.Request(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, characterReq)
+	characterID, err := uuid.Parse(httpReq.CharacterID)
 	if err != nil {
-		http.Error(w, "Failed to request character", http.StatusInternalServerError)
+		http.Error(w, "Invalid character ID", http.StatusBadRequest)
 		return
 	}
 
-	stopReq := model.StopActionRequest{
-		CharacterID: characterData.(*game.Character).ID,
+	message := model.StopActionMessage{
+		CharacterID: characterID,
 	}
 
-	if err := s.sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, stopReq); err != nil {
+	if err := s.sys.Publish(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, message); err != nil {
 		http.Error(w, "Failed to request character action stop", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Action stopped successfully"))
+}
+
+func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+	decoder := json.NewDecoder(r.Body)
+	var httpReq model.CreateAccountRequest
+	if err := decoder.Decode(&httpReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	if err := repository.CheckAccountExists(span.Context(), s.db, httpReq); err != nil {
+		http.Error(w, "Account already exists", http.StatusConflict)
+		return
+	}
+
+	account, err := repository.CreateAccount(span.Context(), s.db, httpReq)
+	if err != nil {
+		http.Error(w, "Failed to create account", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(account)
+}
+
+func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+	decoder := json.NewDecoder(r.Body)
+	var httpReq model.CreateSessionRequest
+	if err := decoder.Decode(&httpReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	account, err := repository.ValidateCredentials(span.Context(), s.db, httpReq)
+	if err != nil {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	sessionID, err := repository.CreateSession(span.Context(), s.db, account.ID)
+	if err != nil {
+		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		return
+	}
+
+	token := paseto.CreateSessionToken(span.Context(), account.ID, sessionID)
+
+	response := model.CreateSessionResponse{
+		ID:    sessionID,
+		Token: token,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	sessionID, err := paseto.ValidateSessionTokenFromRequest(r.Context(), r)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	if err := repository.ValidateSession(r.Context(), s.db, sessionID); err != nil {
+		slog.Error("Invalid session", "error", err)
+		http.Error(w, "Invalid session", http.StatusBadRequest)
+		return
+	}
+
+	if err := repository.DeleteSession(span.Context(), s.db, sessionID); err != nil {
+		http.Error(w, "Failed to delete session", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Session deleted successfully"))
 }

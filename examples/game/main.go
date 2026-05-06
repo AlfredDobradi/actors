@@ -10,10 +10,11 @@ import (
 
 	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/api"
+	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/examples/game/database/mmap"
 	"github.com/alfreddobradi/actors/examples/game/logging"
-	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/pkg/system"
-	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -22,17 +23,27 @@ const (
 )
 
 func main() {
+	godotenv.Load()
 	logging.Init()
 
 	registry := system.NewRegistry()
 	actor.InitFactories(registry)
 
+	var (
+		db    database.DB
+		dbErr error
+	)
+	if db, dbErr = mmap.NewStore("game_data.json"); dbErr != nil {
+		slog.Error("Failed to initialize database", "error", dbErr)
+		os.Exit(1)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("game_example", registry)
 
-	server := api.NewServer(":8080", sys)
+	server := api.NewServer(":8080", sys, db)
 	go server.Start()
 
 	characterStore, err := sys.Spawn(ctx, "CharacterStore",
@@ -44,10 +55,10 @@ func main() {
 		return
 	}
 
-	if err := sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: topicCharacter}, model.CreateCharacterRequest{Name: "Alice"}); err != nil {
-		slog.Error("Failed to publish create character message", "error", err)
-		return
-	}
+	// if err := sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: topicCharacter}, model.CreateCharacterRequest{Name: "Alice"}); err != nil {
+	// 	slog.Error("Failed to publish create character message", "error", err)
+	// 	return
+	// }
 
 	handlerTicker, err := sys.Spawn(ctx, "TickerActor")
 	if err != nil {

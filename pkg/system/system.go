@@ -175,6 +175,9 @@ func (h *ActorHandler) SendMessage(ctx context.Context, msg *Message) {
 }
 
 type System struct {
+	id       uuid.UUID
+	hostname string
+
 	bus      *Bus
 	registry *Registry
 
@@ -182,14 +185,18 @@ type System struct {
 	transport any // TODO Add transport layer for external communication
 }
 
-func NewSystem(registry *Registry) *System {
+func NewSystem(hostname string, registry *Registry) *System {
 	if registry == nil {
 		registry = NewRegistry()
 	}
 
 	bus := NewBus()
 
+	id := uuid.NewSHA1(uuid.NameSpaceOID, []byte(hostname))
+
 	s := &System{
+		hostname: hostname,
+		id:       id,
 		bus:      bus,
 		registry: registry,
 	}
@@ -207,6 +214,14 @@ func NewSystem(registry *Registry) *System {
 	})
 
 	return s
+}
+
+func (s *System) GetHostname() string {
+	return s.hostname
+}
+
+func (s *System) GetSystemID() uuid.UUID {
+	return s.id
 }
 
 type Publisher interface {

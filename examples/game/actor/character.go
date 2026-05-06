@@ -30,9 +30,9 @@ func (h *CharacterStore) HandleMessage(ctx context.Context, msg *system.Message)
 	switch payload := msg.GetBody().(type) {
 	case Tick:
 		h.processTick(ctx)
-	case model.StartActionRequest:
+	case model.StartActionMessage:
 		h.startAction(ctx, payload.CharacterID, payload.Action)
-	case model.StopActionRequest:
+	case model.StopActionMessage:
 		h.stopAction(ctx, payload.CharacterID)
 	case model.CreateCharacterRequest:
 		h.addCharacter(ctx, payload)

@@ -116,7 +116,7 @@ func TestPreStartHookExecution(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -147,7 +147,7 @@ func TestPostStartHookExecution(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -182,7 +182,7 @@ func TestHookExecutionOrder(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -238,7 +238,7 @@ func TestPoisonedHookExecution(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -273,7 +273,7 @@ func TestTerminatedHookExecution(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -311,7 +311,7 @@ func TestCrashHookExecution(t *testing.T) {
 
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -354,7 +354,7 @@ func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -385,7 +385,7 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -422,7 +422,7 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.NewSystem(registry)
+	sys := system.NewSystem("test_system", registry)
 
 	handler, err := sys.Spawn(
 		ctx,

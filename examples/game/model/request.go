@@ -1,23 +1,26 @@
 package model
 
-import (
-	"github.com/alfreddobradi/actors/examples/game/game"
-	"github.com/google/uuid"
-)
-
 type CreateCharacterRequest struct {
-	Name string
+	Name string `json:"name"`
 }
 
 type GetCharacterRequest struct {
-	Name string
+	Name string `json:"name"`
+}
+
+type GetCharacterResponse struct {
+	Name       string         `json:"name"`
+	Level      int            `json:"level"`
+	Experience int            `json:"experience"`
+	Inventory  map[string]int `json:"inventory"`
 }
 
 type StartActionRequest struct {
-	CharacterID uuid.UUID
-	Action      game.Action
+	CharacterID string         `json:"character_id"`
+	Action      string         `json:"action"`
+	Context     map[string]any `json:"context"`
 }
 
 type StopActionRequest struct {
-	CharacterID uuid.UUID
+	CharacterID string `json:"character_id"`
 }
