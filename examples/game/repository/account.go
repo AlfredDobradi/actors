@@ -17,13 +17,13 @@ func CheckAccountExists(ctx context.Context, db database.DB, req model.CreateAcc
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Checking if account exists", "username", req.Username, "email", req.Email)
 
-	keys := db.Keys()
+	keys := db.Keys(ctx)
 	for _, key := range keys {
 		if !strings.HasPrefix(key, "account:") {
 			continue
 		}
 
-		val, ok := db.Get(key)
+		val, ok := db.Get(ctx, key)
 		if !ok {
 			continue
 		}
@@ -59,7 +59,7 @@ func CreateAccount(ctx context.Context, db database.DB, req model.CreateAccountR
 		Active:    true,
 	}
 
-	if err := db.Set("account:"+account.ID.String(), account); err != nil {
+	if err := db.Set(ctx, "account:"+account.ID.String(), account); err != nil {
 		return model.CreateAccountResponse{}, err
 	}
 
@@ -70,13 +70,13 @@ func ValidateCredentials(ctx context.Context, db database.DB, req model.CreateSe
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Validating credentials", "username", req.Username)
 
-	keys := db.Keys()
+	keys := db.Keys(ctx)
 	for _, key := range keys {
 		if !strings.HasPrefix(key, "account:") {
 			continue
 		}
 
-		val, ok := db.Get(key)
+		val, ok := db.Get(ctx, key)
 		if !ok {
 			continue
 		}
@@ -106,7 +106,7 @@ func CreateSession(ctx context.Context, db database.DB, accountID uuid.UUID) (uu
 		Active:    true,
 	}
 
-	if err := db.Set("session:"+session.ID.String(), session); err != nil {
+	if err := db.Set(ctx, "session:"+session.ID.String(), session); err != nil {
 		return uuid.Nil, err
 	}
 
@@ -118,7 +118,7 @@ func GetAccountBySessionID(ctx context.Context, db database.DB, sessionID uuid.U
 	span.GetLogger().Info("Getting account by session ID", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	sessionVal, ok := db.Get(sessionKey)
+	sessionVal, ok := db.Get(ctx, sessionKey)
 	if !ok {
 		return model.Account{}, fmt.Errorf("session not found")
 	}
@@ -129,7 +129,7 @@ func GetAccountBySessionID(ctx context.Context, db database.DB, sessionID uuid.U
 	}
 
 	accountKey := "account:" + session.AccountID.String()
-	accountVal, ok := db.Get(accountKey)
+	accountVal, ok := db.Get(ctx, accountKey)
 	if !ok {
 		return model.Account{}, fmt.Errorf("account not found")
 	}
@@ -147,7 +147,7 @@ func ValidateSession(ctx context.Context, db database.DB, sessionID uuid.UUID) e
 	span.GetLogger().Info("Validating session", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	sessionVal, ok := db.Get(sessionKey)
+	sessionVal, ok := db.Get(ctx, sessionKey)
 	if !ok {
 		return fmt.Errorf("session not found")
 	}
@@ -169,7 +169,7 @@ func DeleteSession(ctx context.Context, db database.DB, sessionID uuid.UUID) err
 	span.GetLogger().Info("Deleting session", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	if err := db.Delete(sessionKey); err != nil {
+	if err := db.Delete(ctx, sessionKey); err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 

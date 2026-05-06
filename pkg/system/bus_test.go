@@ -51,7 +51,7 @@ func TestRouting(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
-	sys := system.NewSystem("test_system", registry)
+	sys := system.MustNewSystem(registry, nil)
 
 	handlerFoo, err := sys.Spawn(context.Background(), mockBusActorKind)
 	if err != nil {

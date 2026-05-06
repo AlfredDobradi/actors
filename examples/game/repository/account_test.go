@@ -27,7 +27,7 @@ func TestCreateAccount(t *testing.T) {
 	require.Equal(t, req.Email, resp.Email)
 
 	// Verify account is stored in the database
-	storedAccount, exists := db.Get("account:" + resp.ID.String())
+	storedAccount, exists := db.Get(context.Background(), "account:"+resp.ID.String())
 	require.True(t, exists)
 	require.NotNil(t, storedAccount)
 }
@@ -48,7 +48,7 @@ func TestValidateCredentials(t *testing.T) {
 	}
 
 	// Store the test account in the database
-	err = db.Set("account:"+account.ID.String(), account)
+	err = db.Set(context.Background(), "account:"+account.ID.String(), account)
 	require.NoError(t, err)
 
 	// Validate credentials

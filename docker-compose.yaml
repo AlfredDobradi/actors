@@ -39,13 +39,13 @@ services:
       ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd3:2380
       ETCD_ADVERTISE_CLIENT_URLS: http://etcd3:2379
   
-  nats:
-    image: nats:2.9.17
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    restart: unless-stopped
-    networks: [etcd-net]
+  # nats:
+  #   image: nats:2.9.17
+  #   ports:
+  #     - "4222:4222"
+  #     - "8222:8222"
+  #   restart: unless-stopped
+  #   networks: [etcd-net]
 
 networks:
   etcd-net:

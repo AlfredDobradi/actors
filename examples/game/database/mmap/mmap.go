@@ -2,10 +2,14 @@ package mmap
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
+
+	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/examples/game/telemetry"
 )
 
 type Store struct {
@@ -21,7 +25,7 @@ func NewStore(path string) (*Store, error) {
 	}
 
 	if path != "" {
-		if err := s.Load(); err != nil && !os.IsNotExist(err) {
+		if err := s.Load(context.Background()); err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
 	}
@@ -29,7 +33,10 @@ func NewStore(path string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Set(key string, value fmt.Stringer) error {
+func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Setting key in database", "key", key)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -37,7 +44,10 @@ func (s *Store) Set(key string, value fmt.Stringer) error {
 	return nil
 }
 
-func (s *Store) Get(key string) (string, bool) {
+func (s *Store) Get(ctx context.Context, key string) (string, bool) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Getting key from database", "key", key)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -45,7 +55,10 @@ func (s *Store) Get(key string) (string, bool) {
 	return val, ok
 }
 
-func (s *Store) Delete(key string) error {
+func (s *Store) Delete(ctx context.Context, key string) error {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Deleting key from database", "key", key)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -53,15 +66,7 @@ func (s *Store) Delete(key string) error {
 	return nil
 }
 
-func (s *Store) Clear() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.data = make(map[string]string)
-	return nil
-}
-
-func (s *Store) Keys() []string {
+func (s *Store) Keys(ctx context.Context) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -72,7 +77,7 @@ func (s *Store) Keys() []string {
 	return keys
 }
 
-func (s *Store) Persist() error {
+func (s *Store) Persist(ctx context.Context) error {
 	if s.path == "" {
 		return nil
 	}
@@ -89,7 +94,7 @@ func (s *Store) Persist() error {
 	return os.WriteFile(s.path, buf.Bytes(), 0644)
 }
 
-func (s *Store) Load() error {
+func (s *Store) Load(ctx context.Context) error {
 	if s.path == "" {
 		return nil
 	}
@@ -113,9 +118,22 @@ func (s *Store) Load() error {
 	return nil
 }
 
-func (s *Store) Size() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (s *Store) Close(ctx context.Context) error {
+	return nil
+}
 
-	return len(s.data)
+func (s *Store) StartSession(ctx context.Context) error {
+	return nil
+}
+
+func (s *Store) KeepAlive(ctx context.Context, callback func(any)) error {
+	return nil
+}
+
+func (s *Store) EndSession(ctx context.Context) error {
+	return nil
+}
+
+func init() {
+	var _ database.DB = (*Store)(nil)
 }

@@ -21,13 +21,13 @@ type CreateAccountResponse struct {
 }
 
 type Account struct {
-	ID        uuid.UUID
-	Username  string
-	Email     string
-	Password  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Active    bool
+	ID        uuid.UUID `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Password  string    `json:"password"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Active    bool      `json:"active"`
 }
 
 func (a Account) String() string {
