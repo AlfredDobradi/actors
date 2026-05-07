@@ -1,11 +1,14 @@
 package actor
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
 
+	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/pkg/system"
@@ -15,6 +18,19 @@ import (
 type characterStore struct {
 	mx         *sync.Mutex
 	characters map[uuid.UUID]game.Character
+}
+
+func (s *characterStore) encode() ([]byte, error) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	// Serialize the character store to a byte slice
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	if err := enc.Encode(s.characters); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 type AccountActor struct {
@@ -54,6 +70,43 @@ func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) s
 	default:
 		slog.Warn("Received message with unknown payload type", "actorID", h.GetID(), "messageID", msg.GetID(), "payloadType", fmt.Sprintf("%T", payload))
 	}
+	return nil
+}
+
+func (h *AccountActor) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		ID         uuid.UUID
+		Name       string
+		Characters map[uuid.UUID]game.Character
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	h.ID = aux.ID
+	h.Name = aux.Name
+	h.Characters = &characterStore{
+		mx:         &sync.Mutex{},
+		characters: aux.Characters,
+	}
+
+	return nil
+}
+
+func (h *AccountActor) Persist(ctx context.Context, db database.DB) error {
+	mapAccount := map[string]any{
+		"ID":         h.ID,
+		"Name":       h.Name,
+		"Characters": h.Characters.characters,
+	}
+	raw, err := json.Marshal(mapAccount)
+	if err != nil {
+		return err
+	}
+	return db.Set(ctx, fmt.Sprintf("actor:account:%s", h.ID), database.ToStringerable(string(raw)))
+}
+
+func (h *AccountActor) Restore(ctx context.Context, db database.DB) error {
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 )
@@ -40,6 +41,16 @@ func (h *TickerActor) GetKind() string {
 
 func (h *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	slog.Info("Received message", "actorID", h.GetID(), "messageID", msg.GetID(), "responseTo", msg.GetResponseTo(), "payload", fmt.Sprintf("%v", msg.GetBody()))
+	return nil
+}
+
+func (h *TickerActor) Persist(ctx context.Context, db database.DB) error {
+	// noop - this actor doesn't have any state to persist
+	return nil
+}
+
+func (h *TickerActor) Restore(ctx context.Context, db database.DB) error {
+	// noop - this actor doesn't have any state to restore
 	return nil
 }
 
