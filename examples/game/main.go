@@ -10,8 +10,9 @@ import (
 
 	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/api"
+	"github.com/alfreddobradi/actors/examples/game/config"
 	"github.com/alfreddobradi/actors/examples/game/database"
-	"github.com/alfreddobradi/actors/examples/game/database/mmap"
+	"github.com/alfreddobradi/actors/examples/game/database/etcd"
 	"github.com/alfreddobradi/actors/examples/game/logging"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/joho/godotenv"
@@ -26,6 +27,11 @@ func main() {
 	godotenv.Load()
 	logging.Init()
 
+	if err := config.Load("./config.yaml"); err != nil {
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
+	}
+
 	registry := system.NewRegistry()
 	actor.InitFactories(registry)
 
@@ -33,7 +39,7 @@ func main() {
 		db    database.DB
 		dbErr error
 	)
-	if db, dbErr = mmap.NewStore("game_data.json"); dbErr != nil {
+	if db, dbErr = etcd.New([]string{"localhost:22379", "localhost:22479", "localhost:22579"}); dbErr != nil {
 		slog.Error("Failed to initialize database", "error", dbErr)
 		os.Exit(1)
 	}
@@ -41,10 +47,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sys := system.NewSystem("game_example", registry)
+	sys, err := system.NewSystem(registry, db)
+	if err != nil {
+		slog.Error("Failed to create system", "error", err)
+		os.Exit(1)
+	}
 
-	server := api.NewServer(":8080", sys, db)
-	go server.Start()
+	apiServer := api.NewServer(sys, db)
+	go apiServer.Start()
 
 	characterStore, err := sys.Spawn(ctx, "CharacterStore",
 		system.WithSubscription(topicTicks),
@@ -54,11 +64,6 @@ func main() {
 		slog.Error("Failed to spawn actor", "error", err)
 		return
 	}
-
-	// if err := sys.Publish(ctx, uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: topicCharacter}, model.CreateCharacterRequest{Name: "Alice"}); err != nil {
-	// 	slog.Error("Failed to publish create character message", "error", err)
-	// 	return
-	// }
 
 	handlerTicker, err := sys.Spawn(ctx, "TickerActor")
 	if err != nil {
@@ -82,5 +87,7 @@ func main() {
 	characterStore.Stop()
 	characterStore.WaitForTermination()
 
-	server.Shutdown(ctx)
+	apiServer.Shutdown(ctx)
+	sys.Shutdown(ctx)
+	db.Close(ctx)
 }

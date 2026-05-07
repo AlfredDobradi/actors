@@ -4,17 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync/atomic"
 
+	"github.com/alfreddobradi/actors/examples/game/config"
+	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/google/uuid"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
-
-/*
-* Registry of actors
-* Bus for messaging between actors
-* Ability to spawn actor ad-hoc for execution
-* Lifecycle events
- */
 
 type ContextKey string
 
@@ -175,30 +172,47 @@ func (h *ActorHandler) SendMessage(ctx context.Context, msg *Message) {
 }
 
 type System struct {
-	id       uuid.UUID
-	hostname string
+	id   uuid.UUID
+	name string
 
 	bus      *Bus
 	registry *Registry
+	store    database.DB
 
 	//nolint:unused
 	transport any // TODO Add transport layer for external communication
 }
 
-func NewSystem(hostname string, registry *Registry) *System {
+func MustNewSystem(registry *Registry, store database.DB) *System {
+	sys, err := NewSystem(registry, store)
+	if err != nil {
+		slog.Error("Failed to create system", "error", err)
+		os.Exit(1)
+	}
+	return sys
+}
+
+func NewSystem(registry *Registry, store database.DB) (*System, error) {
+	if err := store.StartSession(context.Background()); err != nil {
+		slog.Error("Failed to start session", "error", err)
+		return nil, err
+	}
+
 	if registry == nil {
 		registry = NewRegistry()
 	}
 
 	bus := NewBus()
 
-	id := uuid.NewSHA1(uuid.NameSpaceOID, []byte(hostname))
+	nodeName := config.GetConfig().NodeName
+	id := uuid.NewSHA1(uuid.NameSpaceOID, []byte(nodeName))
 
 	s := &System{
-		hostname: hostname,
+		name:     nodeName,
 		id:       id,
 		bus:      bus,
 		registry: registry,
+		store:    store,
 	}
 
 	bus.SetRouteFunction(func(actorID uuid.UUID, msg *Message) error {
@@ -213,11 +227,57 @@ func NewSystem(hostname string, registry *Registry) *System {
 		return nil
 	})
 
-	return s
+	if err := s.advertise(context.Background(), config.GetConfig().Addr); err != nil {
+		slog.Error("Failed to advertise system", "error", err)
+		return nil, err
+	}
+
+	if err := s.startKeepalive(context.Background()); err != nil {
+		slog.Error("Failed to start keepalive", "error", err)
+		return nil, err
+	}
+
+	return s, nil
 }
 
-func (s *System) GetHostname() string {
-	return s.hostname
+func (s *System) advertise(ctx context.Context, address string) error {
+	if s.store != nil {
+		if err := s.store.Set(database.WithLease(ctx, true), fmt.Sprintf("system:%s:hostname", s.id), database.ToStringerable(s.name)); err != nil {
+			return err
+		}
+		if err := s.store.Set(database.WithLease(ctx, true), fmt.Sprintf("system:%s:address", s.id), database.ToStringerable(address)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *System) startKeepalive(ctx context.Context) error {
+	if s.store != nil {
+		return s.store.KeepAlive(ctx, func(data any) {
+			switch v := data.(type) {
+			case clientv3.LeaseKeepAliveResponse:
+				slog.Debug("Received keepalive callback", "lease_id", v.ID, "data", fmt.Sprintf("%v", data))
+			default:
+				slog.Debug("Received unknown keepalive response", "data", fmt.Sprintf("%v", data))
+			}
+		})
+	}
+	return nil
+}
+
+func (s *System) Shutdown(ctx context.Context) error {
+	if s.store != nil {
+		if err := s.store.EndSession(ctx); err != nil {
+			slog.Error("Failed to end database session", "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *System) GetName() string {
+	return s.name
 }
 
 func (s *System) GetSystemID() uuid.UUID {
@@ -246,6 +306,16 @@ func (s *System) Request(ctx context.Context, sender uuid.UUID, recipient Recipi
 
 func (s *System) Publish(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) error {
 	return s.bus.Publish(ctx, sender, recipient, payload)
+}
+
+func (s *System) registerActor(ctx context.Context, handler *ActorHandler) error {
+	s.registry.actors[handler.actor.GetID()] = handler
+	if s.store != nil {
+		if err := s.store.Set(database.WithLease(ctx, true), fmt.Sprintf("actor:%s:hostname", handler.actor.GetID()), database.ToStringerable(s.name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // TODO Unexpose this method once we have better communication options.
@@ -287,7 +357,9 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 		handler.postStartHooks.run(ctx, actor)
 	}
 
-	s.registry.actors[actor.GetID()] = handler
+	if err := s.registerActor(ctx, handler); err != nil {
+		return nil, err
+	}
 
 	return handler, nil
 }

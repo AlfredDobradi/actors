@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 
 	"github.com/alfreddobradi/actors/examples/game/api/middleware"
+	"github.com/alfreddobradi/actors/examples/game/config"
 	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/gorilla/mux"
@@ -14,20 +16,27 @@ import (
 type Server struct {
 	*http.Server
 
-	sys *system.System
-	db  database.DB
+	sys      *system.System
+	db       database.DB
+	listener net.Listener
 }
 
-func NewServer(addr string, sys *system.System, db database.DB) *Server {
+func NewServer(sys *system.System, db database.DB) *Server {
 	router := mux.NewRouter()
+
+	listener, err := net.Listen("tcp", config.GetConfig().Addr)
+	if err != nil {
+		slog.Error("Failed to start listener", "error", err)
+		return nil
+	}
 
 	s := &Server{
 		Server: &http.Server{
-			Addr:    addr,
 			Handler: router,
 		},
-		sys: sys,
-		db:  db,
+		sys:      sys,
+		db:       db,
+		listener: listener,
 	}
 
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,8 +63,13 @@ func NewServer(addr string, sys *system.System, db database.DB) *Server {
 	return s
 }
 
+func (s *Server) Addr() string {
+	return s.listener.Addr().String()
+}
+
 func (s *Server) Start() error {
-	return s.ListenAndServe()
+	slog.Info("Starting API server", "addr", s.Addr())
+	return s.Serve(s.listener)
 }
 
 func (s *Server) Stop(ctx context.Context) error {
