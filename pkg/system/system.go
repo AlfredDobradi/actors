@@ -39,6 +39,9 @@ type Actor interface {
 	Start(context.Context)
 	Stop(context.Context) error
 	HandleMessage(context.Context, *Message) HandleError
+
+	Persist(context.Context, database.DB) error
+	Restore(context.Context, database.DB) error
 }
 
 type ActorHandler struct {

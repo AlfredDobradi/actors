@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -43,6 +44,14 @@ func (m *MockActor) GetKind() string {
 func (m *MockActor) Start(ctx context.Context) {}
 
 func (m *MockActor) Stop(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockActor) Persist(ctx context.Context, db database.DB) error {
+	return nil
+}
+
+func (m *MockActor) Restore(ctx context.Context, db database.DB) error {
 	return nil
 }
 

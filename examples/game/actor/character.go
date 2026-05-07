@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/examples/game/telemetry"
@@ -58,6 +59,14 @@ func (h *CharacterStore) Start(ctx context.Context) {
 
 func (h *CharacterStore) Stop(ctx context.Context) error {
 	slog.Info("Stopping character store", "actorID", h.GetID())
+	return nil
+}
+
+func (h *CharacterStore) Persist(ctx context.Context, db database.DB) error {
+	return nil
+}
+
+func (h *CharacterStore) Restore(ctx context.Context, db database.DB) error {
 	return nil
 }
 
