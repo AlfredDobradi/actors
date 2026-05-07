@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/examples/game/paseto"
@@ -159,6 +160,18 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
+	}
+
+	if s.sys.IsActorSpawned(r.Context(), account.ID) == system.ActorStateNotFound {
+		// Actor not found, spawn a new one
+		if _, err := s.sys.SpawnWithParams(span.Context(), "AccountActor", actor.AccountActorParams{ID: account.ID, Name: account.Username}); err != nil {
+			slog.Error("Failed to spawn account actor", "error", err, "accountID", account.ID)
+			http.Error(w, "Failed to spawn account actor", http.StatusInternalServerError)
+			return
+		}
+		slog.Info("Spawned new account actor for session", "accountID", account.ID, "sessionID", sessionID)
+	} else {
+		slog.Info("Account actor already spawned for session", "accountID", account.ID, "sessionID", sessionID)
 	}
 
 	token := paseto.CreateSessionToken(span.Context(), account.ID, sessionID)

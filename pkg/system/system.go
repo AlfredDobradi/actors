@@ -23,6 +23,14 @@ const (
 	ContextKeyFactoryParams ContextKey = "factory_params"
 )
 
+type ActorState uint8
+
+const (
+	ActorStateNotFound ActorState = iota
+	ActorStateLocal
+	ActorStateRemote
+)
+
 type ActorFactory func(ctx context.Context) Actor
 type SenderFunc func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error)
 type HandlerOpt func(*ActorHandler, *System)
@@ -370,4 +378,24 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 func (s *System) SpawnWithParams(ctx context.Context, kind string, params any, opts ...HandlerOpt) (*ActorHandler, error) {
 	ctx = context.WithValue(ctx, ContextKeyFactoryParams, params)
 	return s.Spawn(ctx, kind, opts...)
+}
+
+func (s *System) IsActorSpawned(ctx context.Context, actorID uuid.UUID) ActorState {
+	// lookup actor locally
+	if _, exists := s.registry.actors[actorID]; exists {
+		return ActorStateLocal
+	}
+
+	// If we have no connection to a store there's no way of looking up remote actors
+	if s.store == nil {
+		return ActorStateNotFound
+	}
+
+	// lookup actor in the store
+	key := fmt.Sprintf("actor:%s:hostname", actorID)
+	if _, ok := s.store.Get(ctx, key); ok {
+		return ActorStateRemote
+	}
+
+	return ActorStateNotFound
 }

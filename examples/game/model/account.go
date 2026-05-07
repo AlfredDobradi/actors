@@ -61,3 +61,11 @@ func (s Session) String() string {
 	encoder.Encode(s)
 	return buf.String()
 }
+
+type SpawnAccountActorRequest struct {
+	AccountID uuid.UUID `json:"account_id"`
+}
+
+type SpawnAccountActorResponse struct {
+	AccountID uuid.UUID `json:"account_id"`
+}

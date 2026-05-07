@@ -127,17 +127,26 @@ func newCharacterStore() *characterStore {
 }
 
 type AccountActorParams struct {
+	ID   uuid.UUID
 	Name string
 }
 
 func accountActorFactory(ctx context.Context) system.Actor {
 	params, ok := ctx.Value(system.ContextKeyFactoryParams).(AccountActorParams)
 	if !ok {
-		params = AccountActorParams{Name: "default"}
+		params = AccountActorParams{ID: uuid.New(), Name: "default"}
+	}
+
+	if params.ID == uuid.Nil {
+		params.ID = uuid.New()
+	}
+
+	if params.Name == "" {
+		params.Name = "default"
 	}
 
 	return &AccountActor{
-		ID:         uuid.New(),
+		ID:         params.ID,
 		Name:       params.Name,
 		Characters: newCharacterStore(),
 	}
