@@ -12,7 +12,7 @@ var cfg *Config
 func GetConfig() *Config {
 	if cfg == nil {
 		slog.Warn("Config not loaded, returning default values")
-		return &Config{
+		cfg = &Config{
 			Addr:     "localhost:8080",
 			NodeName: "default-node",
 		}
