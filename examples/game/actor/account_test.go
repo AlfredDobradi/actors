@@ -18,7 +18,9 @@ func TestAccountActorFactory(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory("AccountActor", accountActorFactory)
 
-	sys := system.MustNewSystem(registry, nil)
+	db, err := mmap.NewStore("")
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 	params := AccountActorParams{Name: "TestAccount"}
 	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
 	require.NoError(t, err)

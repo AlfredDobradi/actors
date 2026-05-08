@@ -15,11 +15,13 @@ import (
 
 var symmetricKey *paseto.V4SymmetricKey
 
+var errEmptyKey = fmt.Errorf("PASETO_KEY environment variable is not set")
+
 func readKeyFromEnv() (*paseto.V4SymmetricKey, error) {
 	rawKey := os.Getenv("PASETO_KEY")
 
 	if rawKey == "" {
-		return nil, os.ErrNotExist
+		return nil, errEmptyKey
 	}
 
 	key, err := paseto.V4SymmetricKeyFromHex(rawKey)

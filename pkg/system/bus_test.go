@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/examples/game/database/mmap"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -54,7 +55,9 @@ func TestRouting(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
-	sys := system.MustNewSystem(registry, nil)
+	db, err := mmap.NewStore("")
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handlerFoo, err := sys.Spawn(context.Background(), mockBusActorKind)
 	if err != nil {

@@ -204,6 +204,10 @@ func MustNewSystem(registry *Registry, store database.DB) *System {
 }
 
 func NewSystem(registry *Registry, store database.DB) (*System, error) {
+	if store == nil {
+		return nil, fmt.Errorf("database store is required")
+	}
+
 	if err := store.StartSession(context.Background()); err != nil {
 		slog.Error("Failed to start session", "error", err)
 		return nil, err
@@ -346,7 +350,7 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 	})
 	ctx = context.WithValue(ctx, ContextKeySenderFn, senderFn)
 
-	actor := factory(ctx)
+	actor := factory.Fn(ctx)
 
 	if s.registry.actors[actor.GetID()] != nil {
 		slog.Debug("Actor already exists with ID, returning existing handler", "actorID", actor.GetID())
@@ -355,6 +359,52 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 
 	opts = append(opts, WithSubscription(fmt.Sprintf("actor:%s", actor.GetID())))
 	opts = append(opts, WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())))
+
+	handler := NewActorHandler(s, actor, opts...)
+
+	for _, hookOpt := range factory.Hooks {
+		hookOpt(handler, s)
+	}
+
+	if handler.preStartHooks != nil {
+		handler.preStartHooks.run(ctx, actor)
+	}
+
+	go handler.Start(ctx)
+
+	if handler.postStartHooks != nil {
+		handler.postStartHooks.run(ctx, actor)
+	}
+
+	if err := s.registerActor(ctx, handler); err != nil {
+		return nil, err
+	}
+
+	return handler, nil
+}
+
+func (s *System) AttemptRestoreActor(ctx context.Context, kind string, id uuid.UUID) (*ActorHandler, error) {
+	factory, exists := s.registry.factories[kind]
+	if !exists {
+		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
+	}
+
+	// Create a temporary actor instance to call Restore on
+	actor := factory.Fn(ctx)
+
+	if err := actor.Restore(ctx, s.store); err != nil {
+		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, id, err)
+	}
+
+	if s.registry.actors[actor.GetID()] != nil {
+		slog.Debug("Actor already exists with ID, returning existing handler", "actorID", actor.GetID())
+		return s.registry.actors[actor.GetID()], nil
+	}
+
+	opts := []HandlerOpt{
+		WithSubscription(fmt.Sprintf("actor:%s", actor.GetID())),
+		WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())),
+	}
 
 	handler := NewActorHandler(s, actor, opts...)
 
