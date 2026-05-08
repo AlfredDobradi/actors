@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -33,12 +33,17 @@ func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Setting key in database", "key", key)
 
+	fields := []any{"key", key}
+
 	opts := []clientv3.OpOption{}
 	if database.UseLease(ctx) {
+		fields = append(fields, "lease_id", s.sessionID)
 		opts = append(opts, clientv3.WithLease(clientv3.LeaseID(s.sessionID)))
 	}
 
-	_, err := s.Client.Put(ctx, key, value.String(), opts...)
+	slog.Info("Setting key in database", fields...)
+
+	_, err := s.Client.Put(context.Background(), key, value.String(), opts...)
 	return err
 }
 

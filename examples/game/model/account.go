@@ -69,3 +69,12 @@ type SpawnAccountActorRequest struct {
 type SpawnAccountActorResponse struct {
 	AccountID uuid.UUID `json:"account_id"`
 }
+
+type AccountActorParams struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (p AccountActorParams) GetID() uuid.UUID {
+	return p.ID
+}

@@ -8,9 +8,10 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/pkg/database"
+	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 )
@@ -75,9 +76,9 @@ func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) s
 
 func (h *AccountActor) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ID         uuid.UUID
-		Name       string
-		Characters map[uuid.UUID]game.Character
+		ID         uuid.UUID                    `json:"id"`
+		Name       string                       `json:"name"`
+		Characters map[uuid.UUID]game.Character `json:"characters"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -93,20 +94,51 @@ func (h *AccountActor) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (h *AccountActor) Persist(ctx context.Context, db database.DB) error {
+func (h *AccountActor) Persist(ctx context.Context, db system.Persister) error {
+	if db == nil {
+		return fmt.Errorf("no database provided for persistence")
+	}
+
 	mapAccount := map[string]any{
-		"ID":         h.ID,
-		"Name":       h.Name,
-		"Characters": h.Characters.characters,
+		"id":         h.ID,
+		"name":       h.Name,
+		"characters": h.Characters.characters,
 	}
 	raw, err := json.Marshal(mapAccount)
 	if err != nil {
 		return err
 	}
+
 	return db.Set(ctx, fmt.Sprintf("actor:account:%s", h.ID), database.ToStringerable(string(raw)))
 }
 
-func (h *AccountActor) Restore(ctx context.Context, db database.DB) error {
+func (h *AccountActor) Restore(ctx context.Context, db system.Restorer) error {
+	if db == nil {
+		return fmt.Errorf("no database provided for restoration")
+	}
+
+	key := fmt.Sprintf("actor:account:%s", h.ID)
+	data, ok := db.Get(ctx, key)
+	if !ok {
+		return fmt.Errorf("no data found in database for key %s", key)
+	}
+
+	var aux struct {
+		ID         uuid.UUID                    `json:"id"`
+		Name       string                       `json:"name"`
+		Characters map[uuid.UUID]game.Character `json:"characters"`
+	}
+	if err := json.Unmarshal([]byte(data), &aux); err != nil {
+		return err
+	}
+
+	h.ID = aux.ID
+	h.Name = aux.Name
+	h.Characters = &characterStore{
+		mx:         &sync.Mutex{},
+		characters: aux.Characters,
+	}
+
 	return nil
 }
 
@@ -126,15 +158,10 @@ func newCharacterStore() *characterStore {
 	}
 }
 
-type AccountActorParams struct {
-	ID   uuid.UUID
-	Name string
-}
-
 func accountActorFactory(ctx context.Context) system.Actor {
-	params, ok := ctx.Value(system.ContextKeyFactoryParams).(AccountActorParams)
+	params, ok := ctx.Value(sysmodel.ContextKeyFactoryParams).(model.AccountActorParams)
 	if !ok {
-		params = AccountActorParams{ID: uuid.New(), Name: "default"}
+		params = model.AccountActorParams{ID: uuid.New(), Name: "default"}
 	}
 
 	if params.ID == uuid.Nil {

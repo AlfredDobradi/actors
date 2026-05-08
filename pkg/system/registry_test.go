@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alfreddobradi/actors/examples/game/database/mmap"
+	"github.com/alfreddobradi/actors/pkg/database/mmap"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

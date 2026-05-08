@@ -5,13 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/examples/game/paseto"
 	"github.com/alfreddobradi/actors/examples/game/repository"
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 )
@@ -162,13 +162,13 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.sys.IsActorSpawned(r.Context(), account.ID) == system.ActorStateNotFound {
-		if _, err := s.sys.AttemptRestoreActor(span.Context(), "AccountActor", account.ID); err != nil {
+	if s.sys.IsActorSpawned(r.Context(), account.ID) == sysmodel.ActorStateNotFound {
+		if _, err := s.sys.AttemptRestoreActor(span.Context(), "AccountActor", model.AccountActorParams{ID: account.ID}); err != nil {
 			slog.Warn("Failed to restore account actor", "error", err, "accountID", account.ID)
 		}
 
 		// Actor not found, spawn a new one
-		if _, err := s.sys.SpawnWithParams(span.Context(), "AccountActor", actor.AccountActorParams{ID: account.ID, Name: account.Username}); err != nil {
+		if _, err := s.sys.SpawnWithParams(span.Context(), "AccountActor", model.AccountActorParams{ID: account.ID, Name: account.Username}); err != nil {
 			slog.Error("Failed to spawn account actor", "error", err, "accountID", account.ID)
 			http.Error(w, "Failed to spawn account actor", http.StatusInternalServerError)
 			return

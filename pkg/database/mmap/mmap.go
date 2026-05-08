@@ -8,8 +8,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 )
 
 type Store struct {
@@ -91,7 +91,7 @@ func (s *Store) Persist(ctx context.Context) error {
 		return err
 	}
 
-	return os.WriteFile(s.path, buf.Bytes(), 0644)
+	return os.WriteFile(s.path, buf.Bytes(), 0600)
 }
 
 func (s *Store) Load(ctx context.Context) error {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
 	"github.com/alfreddobradi/actors/examples/game/model"
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
 )
 

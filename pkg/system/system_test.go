@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
-	"github.com/alfreddobradi/actors/examples/game/database/mmap"
+	"github.com/alfreddobradi/actors/pkg/database/mmap"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -48,11 +47,11 @@ func (m *MockActor) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockActor) Persist(ctx context.Context, db database.DB) error {
+func (m *MockActor) Persist(ctx context.Context, db system.Persister) error {
 	return nil
 }
 
-func (m *MockActor) Restore(ctx context.Context, db database.DB) error {
+func (m *MockActor) Restore(ctx context.Context, db system.Restorer) error {
 	return nil
 }
 

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database/mmap"
 	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/pkg/database/mmap"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )

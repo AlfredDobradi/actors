@@ -12,3 +12,5 @@ run: build
 clean:
 	rm -rf bin
 
+lint:
+	golangci-lint run --config .golangci.yaml

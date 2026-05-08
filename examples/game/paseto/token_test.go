@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"aidanwoods.dev/go-paseto"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +55,6 @@ func TestReadKeyFromEnv(t *testing.T) {
 
 			key, err := readKeyFromEnv()
 			if tt.expectError != nil {
-				spew.Dump(err)
 				require.Error(t, err)
 				require.IsType(t, tt.expectError, err)
 				require.Nil(t, key)

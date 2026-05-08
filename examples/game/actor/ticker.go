@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 )
@@ -44,19 +44,19 @@ func (h *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) sy
 	return nil
 }
 
-func (h *TickerActor) Persist(ctx context.Context, db database.DB) error {
+func (h *TickerActor) Persist(ctx context.Context, db system.Persister) error {
 	// noop - this actor doesn't have any state to persist
 	return nil
 }
 
-func (h *TickerActor) Restore(ctx context.Context, db database.DB) error {
+func (h *TickerActor) Restore(ctx context.Context, db system.Restorer) error {
 	// noop - this actor doesn't have any state to restore
 	return nil
 }
 
 func (h *TickerActor) tickCallback(ctx context.Context) error {
 	spanID := uuid.New()
-	sctx := context.WithValue(ctx, system.ContextKeySpanID, spanID)
+	sctx := context.WithValue(ctx, model.ContextKeySpanID, spanID)
 
 	slog.Debug("Sending tick message", "span_id", spanID, "actorID", h.GetID())
 
@@ -105,6 +105,6 @@ func tickerActorFactory(ctx context.Context) system.Actor {
 	return &TickerActor{
 		ID:           uuid.New(),
 		timer:        time.NewTicker(interval),
-		sendCallback: ctx.Value(system.ContextKeySenderFn).(system.SenderFunc),
+		sendCallback: ctx.Value(model.ContextKeySenderFn).(system.SenderFunc),
 	}
 }

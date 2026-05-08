@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/alfreddobradi/actors/examples/game/database/mmap"
 	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/pkg/database/mmap"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func TestAccountActorFactory(t *testing.T) {
 	db, err := mmap.NewStore("")
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
-	params := AccountActorParams{Name: "TestAccount"}
+	params := model.AccountActorParams{Name: "TestAccount"}
 	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
 	require.NoError(t, err)
 	require.NotNil(t, actorHandler)
@@ -37,7 +38,7 @@ func TestActorPersistence(t *testing.T) {
 	db, err := mmap.NewStore("")
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
-	params := AccountActorParams{Name: "PersistentAccount"}
+	params := model.AccountActorParams{Name: "PersistentAccount"}
 	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
 	require.NoError(t, err)
 	require.NotNil(t, actorHandler)

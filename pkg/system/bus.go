@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/google/uuid"
 )
 
@@ -99,7 +100,7 @@ func (b *Bus) Start() {
 			case msg := <-b.inbox:
 				if routeableMsg, ok := msg.(*Message); ok {
 					spanID := uuid.New()
-					spanCtx := context.WithValue(context.Background(), ContextKeySpanID, spanID)
+					spanCtx := context.WithValue(context.Background(), model.ContextKeySpanID, spanID)
 					if err := b.Route(spanCtx, routeableMsg); err != nil {
 						ctxLogger := slog.With("span_id", spanID)
 						ctxLogger.Error("Failed to route message from bus inbox", "messageID", routeableMsg.GetID(), "error", err)
@@ -130,10 +131,10 @@ func (b *Bus) Publish(ctx context.Context, sender uuid.UUID, recipient Recipient
 }
 
 func (b *Bus) Request(ctx context.Context, sender uuid.UUID, recipient Recipient, payload any) (any, error) {
-	spanID := ctx.Value(ContextKeySpanID).(uuid.UUID)
+	spanID := ctx.Value(model.ContextKeySpanID).(uuid.UUID)
 	if spanID == uuid.Nil {
 		spanID = uuid.New()
-		ctx = context.WithValue(ctx, ContextKeySpanID, spanID)
+		ctx = context.WithValue(ctx, model.ContextKeySpanID, spanID)
 	}
 	deadlineCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -188,7 +189,7 @@ func (b *Bus) Route(ctx context.Context, msg *Message) error {
 	for _, sub := range b.subscriptions {
 		subject := strings.TrimPrefix(msg.GetRecipient().String(), "topic:")
 		matches := sub.pattern.MatchString(subject)
-		ctxLogger := slog.With("span_id", ctx.Value(ContextKeySpanID))
+		ctxLogger := slog.With("span_id", ctx.Value(model.ContextKeySpanID))
 		ctxLogger.Debug("Routing message", "messageID", msg.GetID(), "recipient", msg.GetRecipient().String(), "subscriptionPattern", sub.pattern.String(), "matches", matches)
 		if matches {
 			if b.routeFn != nil {

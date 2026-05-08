@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/alfreddobradi/actors/examples/game/api/middleware"
-	"github.com/alfreddobradi/actors/examples/game/config"
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/pkg/config"
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/gorilla/mux"
 )

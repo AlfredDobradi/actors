@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"math/rand"
 
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 )
 
 const (

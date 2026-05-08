@@ -6,30 +6,16 @@ import (
 	"log/slog"
 	"os"
 	"sync/atomic"
+	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/config"
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/pkg/config"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/google/uuid"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type ContextKey string
-
-const (
-	ContextKeyError         ContextKey = "error"
-	ContextKeySender        ContextKey = "sender"
-	ContextKeySenderFn      ContextKey = "sender_fn"
-	ContextKeySpanID        ContextKey = "span_id"
-	ContextKeyFactoryParams ContextKey = "factory_params"
-)
-
-type ActorState uint8
-
-const (
-	ActorStateNotFound ActorState = iota
-	ActorStateLocal
-	ActorStateRemote
-)
 
 type ActorFactory func(ctx context.Context) Actor
 type SenderFunc func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error)
@@ -48,8 +34,16 @@ type Actor interface {
 	Stop(context.Context) error
 	HandleMessage(context.Context, *Message) HandleError
 
-	Persist(context.Context, database.DB) error
-	Restore(context.Context, database.DB) error
+	Persist(context.Context, Persister) error
+	Restore(context.Context, Restorer) error
+}
+
+type Persister interface {
+	Set(ctx context.Context, key string, value fmt.Stringer) error
+}
+
+type Restorer interface {
+	Get(ctx context.Context, key string) (string, bool)
 }
 
 type ActorHandler struct {
@@ -60,6 +54,8 @@ type ActorHandler struct {
 	done  chan struct{}
 
 	poisoned atomic.Bool
+
+	persister Persister
 
 	preStartHooks   *HookCollection
 	postStartHooks  *HookCollection
@@ -75,6 +71,8 @@ func NewActorHandler(sys *System, actor Actor, opts ...HandlerOpt) *ActorHandler
 
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
+
+		persister: sys.store,
 
 		preStartHooks:   NewHookCollection(HookPreStart),
 		postStartHooks:  NewHookCollection(HookPostStart),
@@ -113,18 +111,20 @@ func (h *ActorHandler) Stop() {
 func (h *ActorHandler) Start(ctx context.Context) {
 	var handleError HandleError
 
+	persistTimer := time.NewTicker(10 * time.Second)
+
 	defer close(h.done)
 	defer func() {
+		persistTimer.Stop()
+		if err := h.GetActor().Persist(ctx, h.persister); err != nil {
+			slog.Warn("Failed to persist actor state on shutdown", "actor_id", h.actor.GetID(), "error", err)
+		}
 		// Run terminated hooks
 		if h.terminatedHooks != nil {
 			h.terminatedHooks.run(ctx, h.actor)
 		}
-	}()
-	defer func() {
-		// If the actor is terminating but wasn't poisoned it's an unexpected termination
-		// TODO Add recovery logic (log, spawn new actor of the same kind, etc.)
 		if !h.poisoned.Load() && h.crashHooks != nil {
-			ctx = context.WithValue(ctx, ContextKeyError, handleError)
+			ctx = context.WithValue(ctx, model.ContextKeyError, handleError)
 			h.crashHooks.run(ctx, h.actor)
 			return
 		}
@@ -145,6 +145,11 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			handleError = h.actor.HandleMessage(ctx, msg)
 			if handleError != nil && !handleError.IsRecoverable() {
 				return
+			}
+		case <-persistTimer.C:
+			slog.Info("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())
+			if err := h.GetActor().Persist(ctx, h.persister); err != nil {
+				slog.Warn("Failed to persist actor state", "actor_id", h.actor.GetID(), "error", err)
 			}
 		case <-h.stop:
 			h.poisoned.Store(true)
@@ -348,7 +353,7 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 		err := s.bus.Publish(ctx, sender, recipient, payload)
 		return nil, err
 	})
-	ctx = context.WithValue(ctx, ContextKeySenderFn, senderFn)
+	ctx = context.WithValue(ctx, model.ContextKeySenderFn, senderFn)
 
 	actor := factory.Fn(ctx)
 
@@ -383,18 +388,22 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 	return handler, nil
 }
 
-func (s *System) AttemptRestoreActor(ctx context.Context, kind string, id uuid.UUID) (*ActorHandler, error) {
+func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params model.IDParam) (*ActorHandler, error) {
 	factory, exists := s.registry.factories[kind]
 	if !exists {
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
 	}
 
+	accountCtx := context.WithValue(ctx, model.ContextKeyFactoryParams, params)
+
 	// Create a temporary actor instance to call Restore on
-	actor := factory.Fn(ctx)
+	actor := factory.Fn(accountCtx)
 
 	if err := actor.Restore(ctx, s.store); err != nil {
-		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, id, err)
+		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, params.GetID(), err)
 	}
+
+	slog.Info("Successfully restored actor from store", "actorID", params.GetID(), "kind", kind)
 
 	if s.registry.actors[actor.GetID()] != nil {
 		slog.Debug("Actor already exists with ID, returning existing handler", "actorID", actor.GetID())
@@ -426,26 +435,26 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, id uuid.U
 }
 
 func (s *System) SpawnWithParams(ctx context.Context, kind string, params any, opts ...HandlerOpt) (*ActorHandler, error) {
-	ctx = context.WithValue(ctx, ContextKeyFactoryParams, params)
+	ctx = context.WithValue(ctx, model.ContextKeyFactoryParams, params)
 	return s.Spawn(ctx, kind, opts...)
 }
 
-func (s *System) IsActorSpawned(ctx context.Context, actorID uuid.UUID) ActorState {
+func (s *System) IsActorSpawned(ctx context.Context, actorID uuid.UUID) model.ActorState {
 	// lookup actor locally
 	if _, exists := s.registry.actors[actorID]; exists {
-		return ActorStateLocal
+		return model.ActorStateLocal
 	}
 
 	// If we have no connection to a store there's no way of looking up remote actors
 	if s.store == nil {
-		return ActorStateNotFound
+		return model.ActorStateNotFound
 	}
 
 	// lookup actor in the store
 	key := fmt.Sprintf("actor:%s:hostname", actorID)
 	if _, ok := s.store.Get(ctx, key); ok {
-		return ActorStateRemote
+		return model.ActorStateRemote
 	}
 
-	return ActorStateNotFound
+	return model.ActorStateNotFound
 }
