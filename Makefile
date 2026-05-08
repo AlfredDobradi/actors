@@ -14,3 +14,6 @@ clean:
 
 lint:
 	golangci-lint run --config .golangci.yaml
+
+test:
+	go test -v ./...
