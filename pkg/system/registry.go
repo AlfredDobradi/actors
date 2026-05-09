@@ -9,6 +9,7 @@ import (
 )
 
 type Subscription struct {
+	ID      uuid.UUID
 	pattern regexp.Regexp
 	actorID uuid.UUID
 }
@@ -19,6 +20,7 @@ func NewSubscription(pattern string, actorID uuid.UUID) (*Subscription, error) {
 		return nil, fmt.Errorf("invalid subscription pattern: %w", err)
 	}
 	return &Subscription{
+		ID:      uuid.New(),
 		pattern: *re,
 		actorID: actorID,
 	}, nil

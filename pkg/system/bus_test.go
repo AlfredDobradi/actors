@@ -67,11 +67,11 @@ func TestRouting(t *testing.T) {
 		t.Fatalf("Failed to spawn actor: %v", err)
 	}
 
-	err = sys.Subscribe("^foo", handlerFoo.GetActor().GetID())
+	_, err = sys.Subscribe("^foo", handlerFoo.GetActor().GetID())
 	if err != nil {
 		t.Fatalf("Failed to subscribe actor: %v", err)
 	}
-	err = sys.Subscribe("bar$", handlerBar.GetActor().GetID())
+	_, err = sys.Subscribe("bar$", handlerBar.GetActor().GetID())
 	if err != nil {
 		t.Fatalf("Failed to subscribe actor: %v", err)
 	}

@@ -20,9 +20,16 @@ func GetConfig() *Config {
 	return cfg
 }
 
+type Logging struct {
+	Level     string `yaml:"level"`
+	Format    string `yaml:"format"`
+	AddSource bool   `yaml:"add_source"`
+}
+
 type Config struct {
-	Addr     string `yaml:"node_address"`
-	NodeName string `yaml:"node_name"`
+	Addr     string  `yaml:"node_address"`
+	NodeName string  `yaml:"node_name"`
+	Logging  Logging `yaml:"logging"`
 }
 
 func Load(path string) error {
@@ -31,10 +38,12 @@ func Load(path string) error {
 		return err
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+	var tmpCfg Config
+	if err := yaml.Unmarshal(raw, &tmpCfg); err != nil {
 		return err
 	}
+	cfg = &tmpCfg
 
+	slog.Info("Config loaded successfully", "config", cfg)
 	return nil
 }

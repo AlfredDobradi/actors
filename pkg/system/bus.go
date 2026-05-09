@@ -211,14 +211,26 @@ func (b *Bus) SetRouteFunction(routeFn func(actorID uuid.UUID, msg *Message) err
 	b.routeFn = routeFn
 }
 
-func (b *Bus) Subscribe(pattern string, actorID uuid.UUID) error {
+func (b *Bus) Subscribe(pattern string, actorID uuid.UUID) (uuid.UUID, error) {
 	sub, err := NewSubscription(pattern, actorID)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	b.subscriptions = append(b.subscriptions, *sub)
-	return nil
+	return sub.ID, nil
+}
+
+func (b *Bus) Unsubscribe(subscriptionID uuid.UUID, actorID uuid.UUID) error {
+	for i, sub := range b.subscriptions {
+		if sub.ID == subscriptionID && sub.actorID == actorID {
+			b.subscriptions = append(b.subscriptions[:i], b.subscriptions[i+1:]...)
+			slog.Debug("Unsubscribed actor from topic", "actorID", actorID, "subscriptionID", subscriptionID, "pattern", sub.pattern.String())
+			return nil
+		}
+	}
+
+	return fmt.Errorf("subscription not found for ID %s and actorID %s", subscriptionID, actorID)
 }
 
 type MessageQueue struct {

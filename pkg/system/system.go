@@ -15,7 +15,9 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-type ContextKey string
+const (
+	PersistIntervalSeconds = 10
+)
 
 type ActorFactory func(ctx context.Context) Actor
 type SenderFunc func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error)
@@ -53,6 +55,9 @@ type ActorHandler struct {
 	stop  chan struct{}
 	done  chan struct{}
 
+	subscriptions []uuid.UUID
+	publisher     Publisher
+
 	poisoned atomic.Bool
 
 	persister Persister
@@ -71,6 +76,9 @@ func NewActorHandler(sys *System, actor Actor, opts ...HandlerOpt) *ActorHandler
 
 		stop: make(chan struct{}),
 		done: make(chan struct{}),
+
+		subscriptions: make([]uuid.UUID, 0),
+		publisher:     sys,
 
 		persister: sys.store,
 
@@ -105,13 +113,18 @@ func (h *ActorHandler) GetAddress() string {
 }
 
 func (h *ActorHandler) Stop() {
+	for _, subID := range h.subscriptions {
+		if err := h.publisher.Unsubscribe(subID, h.GetID()); err != nil {
+			slog.Warn("Failed to unsubscribe actor from subscription", "subscriptionID", subID, "actorID", h.GetID(), "error", err)
+		}
+	}
 	close(h.stop)
 }
 
 func (h *ActorHandler) Start(ctx context.Context) {
 	var handleError HandleError
 
-	persistTimer := time.NewTicker(10 * time.Second)
+	persistTimer := time.NewTicker(PersistIntervalSeconds * time.Second)
 
 	defer close(h.done)
 	defer func() {
@@ -119,6 +132,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 		if err := h.GetActor().Persist(ctx, h.persister); err != nil {
 			slog.Warn("Failed to persist actor state on shutdown", "actor_id", h.actor.GetID(), "error", err)
 		}
+
 		// Run terminated hooks
 		if h.terminatedHooks != nil {
 			h.terminatedHooks.run(ctx, h.actor)
@@ -147,7 +161,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 				return
 			}
 		case <-persistTimer.C:
-			slog.Info("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())
+			slog.Debug("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())
 			if err := h.GetActor().Persist(ctx, h.persister); err != nil {
 				slog.Warn("Failed to persist actor state", "actor_id", h.actor.GetID(), "error", err)
 			}
@@ -252,10 +266,7 @@ func NewSystem(registry *Registry, store database.DB) (*System, error) {
 		return nil, err
 	}
 
-	if err := s.startKeepalive(context.Background()); err != nil {
-		slog.Error("Failed to start keepalive", "error", err)
-		return nil, err
-	}
+	go s.startKeepalive(context.Background())
 
 	return s, nil
 }
@@ -272,21 +283,32 @@ func (s *System) advertise(ctx context.Context, address string) error {
 	return nil
 }
 
-func (s *System) startKeepalive(ctx context.Context) error {
+func (s *System) startKeepalive(ctx context.Context) {
 	if s.store != nil {
-		return s.store.KeepAlive(ctx, func(data any) {
+		if err := s.store.KeepAlive(ctx, func(data any) {
 			switch v := data.(type) {
-			case clientv3.LeaseKeepAliveResponse:
-				slog.Debug("Received keepalive callback", "lease_id", v.ID, "data", fmt.Sprintf("%v", data))
+			case *clientv3.LeaseKeepAliveResponse:
+				slog.Debug("Received keepalive response", "lease_id", v.ID, "data", fmt.Sprintf("%v", data))
 			default:
-				slog.Debug("Received unknown keepalive response", "data", fmt.Sprintf("%v", data))
+				slog.Debug("Received unknown keepalive response", "data", fmt.Sprintf("%v", data), "type", fmt.Sprintf("%T", data))
 			}
-		})
+		}); err != nil {
+			slog.Error("Keepalive failed", "error", err)
+		}
 	}
-	return nil
 }
 
 func (s *System) Shutdown(ctx context.Context) error {
+	for _, handler := range s.registry.actors {
+		slog.Debug("Shutting down actor", "actorID", handler.GetID(), "kind", handler.GetKind())
+		handler.Stop()
+	}
+
+	for _, handler := range s.registry.actors {
+		slog.Debug("Waiting for actor termination", "actorID", handler.GetID(), "kind", handler.GetKind())
+		handler.WaitForTermination()
+	}
+
 	if s.store != nil {
 		if err := s.store.EndSession(ctx); err != nil {
 			slog.Error("Failed to end database session", "error", err)
@@ -305,11 +327,16 @@ func (s *System) GetSystemID() uuid.UUID {
 }
 
 type Publisher interface {
-	Subscribe(pattern string, actorID uuid.UUID) error
+	Subscribe(pattern string, actorID uuid.UUID) (uuid.UUID, error)
+	Unsubscribe(subscriptionID uuid.UUID, actorID uuid.UUID) error
 }
 
-func (s *System) Subscribe(pattern string, actorID uuid.UUID) error {
+func (s *System) Subscribe(pattern string, actorID uuid.UUID) (uuid.UUID, error) {
 	return s.bus.Subscribe(pattern, actorID)
+}
+
+func (s *System) Unsubscribe(subscriptionID uuid.UUID, actorID uuid.UUID) error {
+	return s.bus.Unsubscribe(subscriptionID, actorID)
 }
 
 func (s *System) Route(ctx context.Context, msg *Message) error {
@@ -362,6 +389,7 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 		return s.registry.actors[actor.GetID()], nil
 	}
 
+	opts = append(opts, WithSubscription("broadcast"))
 	opts = append(opts, WithSubscription(fmt.Sprintf("actor:%s", actor.GetID())))
 	opts = append(opts, WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())))
 
@@ -403,7 +431,7 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, params.GetID(), err)
 	}
 
-	slog.Info("Successfully restored actor from store", "actorID", params.GetID(), "kind", kind)
+	slog.Debug("Successfully restored actor from store", "actorID", params.GetID(), "kind", kind)
 
 	if s.registry.actors[actor.GetID()] != nil {
 		slog.Debug("Actor already exists with ID, returning existing handler", "actorID", actor.GetID())

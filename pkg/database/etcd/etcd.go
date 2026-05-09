@@ -31,7 +31,7 @@ func New(endpoints []string) (*Store, error) {
 
 func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	span := telemetry.SpanFromContext(ctx)
-	span.GetLogger().Info("Setting key in database", "key", key)
+	span.GetLogger().Debug("Setting key in database", "key", key)
 
 	fields := []any{"key", key}
 
@@ -41,7 +41,7 @@ func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 		opts = append(opts, clientv3.WithLease(clientv3.LeaseID(s.sessionID)))
 	}
 
-	slog.Info("Setting key in database", fields...)
+	slog.Debug("Setting key in database", fields...)
 
 	_, err := s.Client.Put(context.Background(), key, value.String(), opts...)
 	return err
@@ -133,15 +133,13 @@ func (s *Store) KeepAlive(ctx context.Context, callback func(any)) error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		for resp := range ch {
-			if resp == nil {
-				slog.Warn("Keepalive channel closed", "session_id", s.sessionID)
-				return
-			}
-			callback(resp)
+	for resp := range ch {
+		if resp == nil {
+			slog.Warn("Keepalive channel closed", "session_id", s.sessionID)
+			return nil
 		}
-	}()
+		callback(resp)
+	}
 	return nil
 }
 

@@ -147,7 +147,7 @@ func (h *AccountActor) Start(ctx context.Context) {
 }
 
 func (h *AccountActor) Stop(ctx context.Context) error {
-	slog.Info("Stopping account actor", "actorID", h.GetID())
+	slog.Debug("Stopping account actor", "actorID", h.GetID())
 	return nil
 }
 

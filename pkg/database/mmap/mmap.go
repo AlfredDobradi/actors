@@ -35,7 +35,7 @@ func NewStore(path string) (*Store, error) {
 
 func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	span := telemetry.SpanFromContext(ctx)
-	span.GetLogger().Info("Setting key in database", "key", key)
+	span.GetLogger().Debug("Setting key in database", "key", key)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

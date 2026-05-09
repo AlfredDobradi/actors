@@ -40,7 +40,6 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	}
 
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("not found", "method", r.Method, "path", r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Not found"))
 	})

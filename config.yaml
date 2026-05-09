@@ -1,2 +1,6 @@
 node_address: 127.0.0.1:8080
 node_name: game_node_1
+logging:
+  level: info
+  format: json
+  add_source: false

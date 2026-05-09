@@ -2,7 +2,6 @@ package actor
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -40,7 +39,7 @@ func (h *TickerActor) GetKind() string {
 }
 
 func (h *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
-	slog.Info("Received message", "actorID", h.GetID(), "messageID", msg.GetID(), "responseTo", msg.GetResponseTo(), "payload", fmt.Sprintf("%v", msg.GetBody()))
+	// this actor should never receive any messages
 	return nil
 }
 
@@ -83,7 +82,6 @@ func (h *TickerActor) Start(ctx context.Context) {
 					slog.Error("Failed to send tick message", "actorID", h.GetID(), "error", err)
 				}
 			case <-ctx.Done():
-				slog.Info("Stopping ticker actor", "actorID", h.GetID())
 				h.timer.Stop()
 				return
 			}
@@ -92,7 +90,7 @@ func (h *TickerActor) Start(ctx context.Context) {
 }
 
 func (h *TickerActor) Stop(ctx context.Context) error {
-	slog.Info("Stopping ticker actor", "actorID", h.GetID())
+	slog.Debug("Stopping ticker actor", "actorID", h.GetID())
 	h.timer.Stop()
 	return nil
 }

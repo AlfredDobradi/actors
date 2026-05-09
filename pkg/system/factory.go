@@ -51,8 +51,11 @@ func WithCrashHook(hook Hook) HookOpt {
 
 func WithSubscription(pattern string) HandlerOpt {
 	return func(h *ActorHandler, sys *System) {
-		if err := sys.Subscribe(pattern, h.actor.GetID()); err != nil {
+		if subID, err := sys.Subscribe(pattern, h.actor.GetID()); err != nil {
 			slog.Warn("Failed to subscribe actor to pattern", "pattern", pattern, "actorID", h.actor.GetID(), "error", err)
+		} else {
+			slog.Debug("Subscribed actor to pattern", "pattern", pattern, "actorID", h.actor.GetID(), "subscriptionID", subID)
+			h.subscriptions = append(h.subscriptions, subID)
 		}
 	}
 }
