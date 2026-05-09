@@ -40,8 +40,6 @@ type DB interface {
 	Get(ctx context.Context, key string) (string, bool)
 	Delete(ctx context.Context, key string) error
 	Keys(ctx context.Context) []string
-	Persist(ctx context.Context) error
-	Load(ctx context.Context) error
 	Close(ctx context.Context) error
 	StartSession(ctx context.Context) error
 	KeepAlive(ctx context.Context, callback func(any)) error

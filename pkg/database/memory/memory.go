@@ -1,11 +1,8 @@
-package mmap
+package memory
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/alfreddobradi/actors/pkg/database"
@@ -15,19 +12,11 @@ import (
 type Store struct {
 	data map[string]string
 	mu   sync.RWMutex
-	path string
 }
 
-func NewStore(path string) (*Store, error) {
+func NewStore() (*Store, error) {
 	s := &Store{
 		data: make(map[string]string),
-		path: path,
-	}
-
-	if path != "" {
-		if err := s.Load(context.Background()); err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
 	}
 
 	return s, nil
@@ -75,47 +64,6 @@ func (s *Store) Keys(ctx context.Context) []string {
 		keys = append(keys, key)
 	}
 	return keys
-}
-
-func (s *Store) Persist(ctx context.Context) error {
-	if s.path == "" {
-		return nil
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	buf := bytes.NewBufferString("")
-	encoder := json.NewEncoder(buf)
-	if err := encoder.Encode(s.data); err != nil {
-		return err
-	}
-
-	return os.WriteFile(s.path, buf.Bytes(), 0600)
-}
-
-func (s *Store) Load(ctx context.Context) error {
-	if s.path == "" {
-		return nil
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := os.ReadFile(s.path)
-	if err != nil {
-		return err
-	}
-
-	strs := make(map[string]string)
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := decoder.Decode(&strs); err != nil {
-		return err
-	}
-
-	s.data = strs
-
-	return nil
 }
 
 func (s *Store) Close(ctx context.Context) error {

@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/model"
-	"github.com/alfreddobradi/actors/pkg/database/mmap"
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCreateAccount(t *testing.T) {
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 
 	req := model.CreateAccountRequest{
@@ -33,7 +33,7 @@ func TestCreateAccount(t *testing.T) {
 }
 
 func TestValidateCredentials(t *testing.T) {
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 
 	// Create a test account

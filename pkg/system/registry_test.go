@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alfreddobradi/actors/pkg/database/mmap"
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ func TestRegistrySpawn(t *testing.T) {
 		return &MockActor{id: uuid.New(), kind: "testActor"}
 	})
 
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 

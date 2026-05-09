@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/pkg/database/mmap"
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -127,7 +127,7 @@ func TestPreStartHookExecution(t *testing.T) {
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithPreStartHook(tracker.CreateHook("preStart")),
 	)
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -163,7 +163,7 @@ func TestPostStartHookExecution(t *testing.T) {
 		func(ctx context.Context) system.Actor { return actor },
 		system.WithPostStartHook(tracker.CreateHook("postStart")),
 	)
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -211,7 +211,7 @@ func TestHookExecutionOrder(t *testing.T) {
 	}
 
 	registry.RegisterFactory(actor.GetKind(), callback, hooks...)
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -267,7 +267,7 @@ func TestPoisonedHookExecution(t *testing.T) {
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated")))
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -303,7 +303,7 @@ func TestTerminatedHookExecution(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithTerminatedHook(tracker.CreateHook("terminated")))
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -344,7 +344,7 @@ func TestCrashHookExecution(t *testing.T) {
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithCrashHook(tracker.CreateHook("crash")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated")))
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -390,7 +390,7 @@ func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 		system.WithCrashHook(tracker.CreateHook("crash")),
 		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated")))
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -423,7 +423,7 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 		system.WithTerminatedHook(tracker.CreateHook("terminated1")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated2")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated3")))
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
@@ -459,7 +459,7 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 

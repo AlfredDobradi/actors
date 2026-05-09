@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/pkg/database/mmap"
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -54,7 +54,7 @@ func TestRouting(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
-	db, err := mmap.NewStore("")
+	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
 
