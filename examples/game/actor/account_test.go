@@ -12,6 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type ID struct {
+	ID uuid.UUID
+}
+
+func (id ID) GetID() uuid.UUID {
+	return id.ID
+}
+
 func TestAccountActorFactory(t *testing.T) {
 	ctx := context.Background()
 	registry := system.NewRegistry()
@@ -58,15 +66,15 @@ func TestActorPersistence(t *testing.T) {
 	actor.Characters.characters[character.ID] = character
 	actor.Characters.mx.Unlock()
 
-	err = actor.Persist(ctx, db)
+	persistErr := actorHandler.Persist(ctx, db)
+	require.NoError(t, persistErr)
+
+	id := ID{ID: actor.GetID()}
+
+	restoredActorHandler, err := sys.AttemptRestoreActor(ctx, actor.GetKind(), id)
 	require.NoError(t, err)
 
-	restoredAccount := &AccountActor{
-		ID: actor.ID,
-	}
-
-	restoreErr := restoredAccount.Restore(ctx, db)
-	require.NoError(t, restoreErr)
+	restoredAccount := restoredActorHandler.GetActor().(*AccountActor)
 
 	require.NoError(t, err)
 	require.Equal(t, "PersistentAccount", restoredAccount.Name)

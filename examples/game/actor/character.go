@@ -8,6 +8,7 @@ import (
 
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
@@ -61,11 +62,11 @@ func (h *CharacterStore) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (h *CharacterStore) Persist(ctx context.Context, db system.Persister) error {
-	return nil
+func (h *CharacterStore) Snapshot(ctx context.Context) (database.Snapshot, error) {
+	return database.Snapshot{}, nil
 }
 
-func (h *CharacterStore) Restore(ctx context.Context, db system.Restorer) error {
+func (h *CharacterStore) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
@@ -23,12 +24,16 @@ type MockBusActor struct {
 	messages []string
 }
 
-func (a *MockBusActor) GetID() uuid.UUID                                       { return a.ID }
-func (a *MockBusActor) GetKind() string                                        { return "MockBusActor" }
-func (a *MockBusActor) Start(ctx context.Context)                              {}
-func (a *MockBusActor) Stop(ctx context.Context) error                         { return nil }
-func (a *MockBusActor) Persist(ctx context.Context, db system.Persister) error { return nil }
-func (a *MockBusActor) Restore(ctx context.Context, db system.Restorer) error  { return nil }
+func (a *MockBusActor) GetID() uuid.UUID               { return a.ID }
+func (a *MockBusActor) GetKind() string                { return "MockBusActor" }
+func (a *MockBusActor) Start(ctx context.Context)      {}
+func (a *MockBusActor) Stop(ctx context.Context) error { return nil }
+func (a *MockBusActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
+	return database.Snapshot{}, nil
+}
+func (a *MockBusActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
+	return nil
+}
 func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	a.mx.Lock()
 	slog.Debug("MockBusActor handling message", "actorID", a.GetID(), "messageID", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))

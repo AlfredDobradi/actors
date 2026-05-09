@@ -9,6 +9,10 @@ import (
 )
 
 const (
+	TickRate = 1 // Tick every second
+)
+
+const (
 	FightBaseCooldown  = 10
 	GatherBaseCooldown = 5
 )

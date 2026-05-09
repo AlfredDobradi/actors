@@ -94,11 +94,7 @@ func (h *AccountActor) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (h *AccountActor) Persist(ctx context.Context, db system.Persister) error {
-	if db == nil {
-		return fmt.Errorf("no database provided for persistence")
-	}
-
+func (h *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
 	mapAccount := map[string]any{
 		"id":         h.ID,
 		"name":       h.Name,
@@ -106,23 +102,15 @@ func (h *AccountActor) Persist(ctx context.Context, db system.Persister) error {
 	}
 	raw, err := json.Marshal(mapAccount)
 	if err != nil {
-		return err
+		return database.Snapshot{}, err
 	}
 
-	snapshot := database.NewSnapshot(raw)
-
-	return db.Persist(ctx, database.SnapshotKey(h.GetKind(), h.GetID()), snapshot)
+	return database.NewSnapshot(raw), nil
 }
 
-func (h *AccountActor) Restore(ctx context.Context, db system.Restorer) error {
-	if db == nil {
-		return fmt.Errorf("no database provided for restoration")
-	}
-
-	key := database.SnapshotKey(h.GetKind(), h.GetID())
-	snapshot, err := db.Restore(ctx, key)
-	if err != nil {
-		return fmt.Errorf("no data found in database for key %s: %w", key, err)
+func (h *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
+	if snapshot.Data == nil {
+		return fmt.Errorf("no snapshot data provided for restoration")
 	}
 
 	var aux struct {
@@ -161,22 +149,27 @@ func newCharacterStore() *characterStore {
 }
 
 func accountActorFactory(ctx context.Context) system.Actor {
-	params, ok := ctx.Value(sysmodel.ContextKeyFactoryParams).(model.AccountActorParams)
-	if !ok {
-		params = model.AccountActorParams{ID: uuid.New(), Name: "default"}
+	accountParams := model.AccountActorParams{
+		ID:   uuid.New(),
+		Name: "default",
 	}
 
-	if params.ID == uuid.Nil {
-		params.ID = uuid.New()
-	}
-
-	if params.Name == "" {
-		params.Name = "default"
+	params := ctx.Value(sysmodel.ContextKeyFactoryParams)
+	if params != nil {
+		switch p := params.(type) {
+		case model.AccountActorParams:
+			accountParams = p
+		case sysmodel.IDParam:
+			accountParams.ID = p.GetID()
+		default:
+			slog.Warn("Received unexpected factory params type, using default params", "expectedType", fmt.Sprintf("%T", model.AccountActorParams{}), "actualType", fmt.Sprintf("%T", params))
+			params = model.AccountActorParams{ID: uuid.New(), Name: "default"}
+		}
 	}
 
 	return &AccountActor{
-		ID:         params.ID,
-		Name:       params.Name,
+		ID:         accountParams.ID,
+		Name:       accountParams.Name,
 		Characters: newCharacterStore(),
 	}
 }

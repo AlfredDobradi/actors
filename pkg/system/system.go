@@ -36,8 +36,8 @@ type Actor interface {
 	Stop(context.Context) error
 	HandleMessage(context.Context, *Message) HandleError
 
-	Persist(context.Context, Persister) error
-	Restore(context.Context, Restorer) error
+	Snapshot(context.Context) (database.Snapshot, error)
+	RestoreFromSnapshot(context.Context, database.Snapshot) error
 }
 
 type Persister interface {
@@ -121,6 +121,42 @@ func (h *ActorHandler) Stop() {
 	close(h.stop)
 }
 
+func (h *ActorHandler) Persist(ctx context.Context, db Persister) error {
+	if db == nil {
+		return fmt.Errorf("no database provided for persistence")
+	}
+
+	snapshot, err := h.actor.Snapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot for actor %s: %w", h.GetID(), err)
+	}
+
+	key := database.SnapshotKey(h.GetKind(), h.GetID())
+	if err := db.Persist(ctx, key, snapshot); err != nil {
+		return fmt.Errorf("failed to persist snapshot for actor %s: %w", h.GetID(), err)
+	}
+
+	return nil
+}
+
+func (h *ActorHandler) Restore(ctx context.Context, db Restorer) error {
+	if db == nil {
+		return fmt.Errorf("no database provided for restoration")
+	}
+
+	key := database.SnapshotKey(h.GetKind(), h.GetID())
+	snapshot, err := db.Restore(ctx, key)
+	if err != nil {
+		return fmt.Errorf("no data found in database for key %s: %w", key, err)
+	}
+
+	if err := h.actor.RestoreFromSnapshot(ctx, snapshot); err != nil {
+		return fmt.Errorf("failed to restore actor from snapshot: %w", err)
+	}
+
+	return nil
+}
+
 func (h *ActorHandler) Start(ctx context.Context) {
 	var handleError HandleError
 
@@ -129,7 +165,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 	defer close(h.done)
 	defer func() {
 		persistTimer.Stop()
-		if err := h.GetActor().Persist(ctx, h.persister); err != nil {
+		if err := h.Persist(ctx, h.persister); err != nil {
 			slog.Warn("Failed to persist actor state on shutdown", "actor_id", h.actor.GetID(), "error", err)
 		}
 
@@ -162,7 +198,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			}
 		case <-persistTimer.C:
 			slog.Debug("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())
-			if err := h.GetActor().Persist(ctx, h.persister); err != nil {
+			if err := h.Persist(ctx, h.persister); err != nil {
 				slog.Warn("Failed to persist actor state", "actor_id", h.actor.GetID(), "error", err)
 			}
 		case <-h.stop:
@@ -422,16 +458,9 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
 	}
 
+	// Create actor with the ID to identify the snapshot
 	accountCtx := context.WithValue(ctx, model.ContextKeyFactoryParams, params)
-
-	// Create a temporary actor instance to call Restore on
 	actor := factory.Fn(accountCtx)
-
-	if err := actor.Restore(ctx, s.store); err != nil {
-		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, params.GetID(), err)
-	}
-
-	slog.Debug("Successfully restored actor from store", "actorID", params.GetID(), "kind", kind)
 
 	if s.registry.actors[actor.GetID()] != nil {
 		slog.Debug("Actor already exists with ID, returning existing handler", "actorID", actor.GetID())
@@ -444,6 +473,11 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 	}
 
 	handler := NewActorHandler(s, actor, opts...)
+	if err := handler.Restore(ctx, s.store); err != nil {
+		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, params.GetID(), err)
+	}
+
+	slog.Debug("Successfully restored actor from store", "actorID", params.GetID(), "kind", kind)
 
 	if handler.preStartHooks != nil {
 		handler.preStartHooks.run(ctx, actor)

@@ -5,13 +5,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
-)
-
-const (
-	tickRate = 1 // ticks per second
 )
 
 type TickerActor struct {
@@ -43,12 +41,12 @@ func (h *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) sy
 	return nil
 }
 
-func (h *TickerActor) Persist(ctx context.Context, db system.Persister) error {
+func (h *TickerActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
 	// noop - this actor doesn't have any state to persist
-	return nil
+	return database.Snapshot{}, nil
 }
 
-func (h *TickerActor) Restore(ctx context.Context, db system.Restorer) error {
+func (h *TickerActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	// noop - this actor doesn't have any state to restore
 	return nil
 }
@@ -96,7 +94,7 @@ func (h *TickerActor) Stop(ctx context.Context) error {
 }
 
 func tickerActorFactory(ctx context.Context) system.Actor {
-	interval := time.Second / tickRate
+	interval := time.Second / game.TickRate
 
 	slog.Debug("starting ticker actor", "interval_ms", interval.Milliseconds())
 

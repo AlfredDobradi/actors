@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
@@ -47,11 +48,11 @@ func (m *MockActor) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockActor) Persist(ctx context.Context, db system.Persister) error {
-	return nil
+func (m *MockActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
+	return database.Snapshot{}, nil
 }
 
-func (m *MockActor) Restore(ctx context.Context, db system.Restorer) error {
+func (m *MockActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	return nil
 }
 
