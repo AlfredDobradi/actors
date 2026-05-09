@@ -109,7 +109,9 @@ func (h *AccountActor) Persist(ctx context.Context, db system.Persister) error {
 		return err
 	}
 
-	return db.Set(ctx, fmt.Sprintf("actor:account:%s", h.ID), database.ToStringerable(string(raw)))
+	snapshot := database.NewSnapshot(raw)
+
+	return db.Persist(ctx, database.SnapshotKey(h.GetKind(), h.GetID()), snapshot)
 }
 
 func (h *AccountActor) Restore(ctx context.Context, db system.Restorer) error {
@@ -117,10 +119,10 @@ func (h *AccountActor) Restore(ctx context.Context, db system.Restorer) error {
 		return fmt.Errorf("no database provided for restoration")
 	}
 
-	key := fmt.Sprintf("actor:account:%s", h.ID)
-	data, ok := db.Get(ctx, key)
-	if !ok {
-		return fmt.Errorf("no data found in database for key %s", key)
+	key := database.SnapshotKey(h.GetKind(), h.GetID())
+	snapshot, err := db.Restore(ctx, key)
+	if err != nil {
+		return fmt.Errorf("no data found in database for key %s: %w", key, err)
 	}
 
 	var aux struct {
@@ -128,7 +130,7 @@ func (h *AccountActor) Restore(ctx context.Context, db system.Restorer) error {
 		Name       string                       `json:"name"`
 		Characters map[uuid.UUID]game.Character `json:"characters"`
 	}
-	if err := json.Unmarshal([]byte(data), &aux); err != nil {
+	if err := json.Unmarshal(snapshot.Data, &aux); err != nil {
 		return err
 	}
 

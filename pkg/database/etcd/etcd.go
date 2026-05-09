@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -103,12 +105,42 @@ func (s *Store) Keys(ctx context.Context) []string {
 	return keys
 }
 
-func (s *Store) Persist(ctx context.Context) error {
-	return nil
+func (s *Store) Persist(ctx context.Context, key string, value database.Snapshot) error {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Persisting snapshot in database", "key", key, "timestamp", value.Timestamp)
+
+	_, err := s.Client.Put(ctx, key, value.String())
+	return err
 }
 
-func (s *Store) Load(ctx context.Context) error {
-	return nil
+func (s *Store) Restore(ctx context.Context, key string) (database.Snapshot, error) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Restoring snapshot from database", "key", key)
+
+	resp, err := s.Client.Get(ctx, key)
+	if err != nil || len(resp.Kvs) == 0 {
+		return database.Snapshot{}, fmt.Errorf("snapshot not found for key: %s", key)
+	}
+	val := string(resp.Kvs[0].Value)
+
+	var snapshot database.Snapshot
+	aux := map[string]any{}
+	if err := json.Unmarshal([]byte(val), &aux); err != nil {
+		return database.Snapshot{}, fmt.Errorf("failed to unmarshal snapshot: %w", err)
+	}
+
+	if timestamp, ok := aux["timestamp"].(float64); ok {
+		snapshot.Timestamp = int64(timestamp)
+	}
+	if data, ok := aux["data"].(string); ok {
+		decoded, err := base64.URLEncoding.DecodeString(data)
+		if err != nil {
+			return database.Snapshot{}, fmt.Errorf("failed to decode snapshot data: %w", err)
+		}
+		snapshot.Data = decoded
+	}
+
+	return snapshot, nil
 }
 
 func init() {

@@ -2,8 +2,6 @@ package actor
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
@@ -63,13 +61,13 @@ func TestActorPersistence(t *testing.T) {
 	err = actor.Persist(ctx, db)
 	require.NoError(t, err)
 
-	key := fmt.Sprintf("actor:account:%s", actor.ID)
-	persistedActor, ok := db.Get(ctx, key)
-	require.True(t, ok)
-	require.NotNil(t, persistedActor)
+	restoredAccount := &AccountActor{
+		ID: actor.ID,
+	}
 
-	var restoredAccount *AccountActor
-	err = json.Unmarshal([]byte(persistedActor), &restoredAccount)
+	restoreErr := restoredAccount.Restore(ctx, db)
+	require.NoError(t, restoreErr)
+
 	require.NoError(t, err)
 	require.Equal(t, "PersistentAccount", restoredAccount.Name)
 	require.NotNil(t, restoredAccount.Characters)

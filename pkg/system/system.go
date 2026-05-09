@@ -41,11 +41,11 @@ type Actor interface {
 }
 
 type Persister interface {
-	Set(ctx context.Context, key string, value fmt.Stringer) error
+	Persist(ctx context.Context, key string, value database.Snapshot) error
 }
 
 type Restorer interface {
-	Get(ctx context.Context, key string) (string, bool)
+	Restore(ctx context.Context, key string) (database.Snapshot, error)
 }
 
 type ActorHandler struct {
