@@ -2,12 +2,16 @@ package actor
 
 import (
 	"context"
+	"encoding/json"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
+	"github.com/alfreddobradi/actors/pkg/testhelper"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +25,48 @@ func (id ID) GetID() uuid.UUID {
 }
 
 func TestAccountActorFactory(t *testing.T) {
+	fooID := uuid.New()
+	barID := uuid.New()
+
+	type idTest func(id uuid.UUID) bool
+
+	tests := []struct {
+		label        string
+		params       any
+		testID       idTest
+		expectedName string
+	}{
+		{
+			label:        "AccountActorParams",
+			params:       model.AccountActorParams{ID: fooID, Name: "TestAccount"},
+			testID:       func(id uuid.UUID) bool { return id == fooID },
+			expectedName: "TestAccount",
+		},
+		{
+			label:        "IDParams",
+			params:       ID{ID: barID},
+			testID:       func(id uuid.UUID) bool { return id == barID },
+			expectedName: "default",
+		},
+		{
+			label: "InvalidParams",
+			params: struct {
+				Foo string
+			}{
+				Foo: "invalid",
+			},
+			// when param type is something unhandled, factory should generate a random ID
+			testID:       func(id uuid.UUID) bool { return id != uuid.Nil },
+			expectedName: "default",
+		},
+		{
+			label:        "NilParams",
+			params:       nil,
+			testID:       func(id uuid.UUID) bool { return id != uuid.Nil },
+			expectedName: "default",
+		},
+	}
+
 	ctx := context.Background()
 	registry := system.NewRegistry()
 	registry.RegisterFactory("AccountActor", accountActorFactory)
@@ -28,13 +74,20 @@ func TestAccountActorFactory(t *testing.T) {
 	db, err := memory.NewStore()
 	require.NoError(t, err)
 	sys := system.MustNewSystem(registry, db)
-	params := model.AccountActorParams{Name: "TestAccount"}
-	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
-	require.NoError(t, err)
-	require.NotNil(t, actorHandler)
 
-	actor := actorHandler.GetActor().(*AccountActor)
-	require.Equal(t, "TestAccount", actor.Name)
+	for _, tt := range tests {
+		tf := func(t *testing.T) {
+			params := tt.params
+			actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
+			require.NoError(t, err)
+			require.NotNil(t, actorHandler)
+
+			actor := actorHandler.GetActor().(*AccountActor)
+			require.Equal(t, tt.expectedName, actor.Name)
+			require.True(t, tt.testID(actor.ID))
+		}
+		t.Run(tt.label, tf)
+	}
 }
 
 func TestActorPersistence(t *testing.T) {
@@ -66,15 +119,11 @@ func TestActorPersistence(t *testing.T) {
 	actor.Characters.characters[character.ID] = character
 	actor.Characters.mx.Unlock()
 
-	persistErr := actorHandler.Persist(ctx, db)
-	require.NoError(t, persistErr)
-
-	id := ID{ID: actor.GetID()}
-
-	restoredActorHandler, err := sys.AttemptRestoreActor(ctx, actor.GetKind(), id)
+	snapshot, err := actorHandler.GetActor().Snapshot(ctx)
 	require.NoError(t, err)
 
-	restoredAccount := restoredActorHandler.GetActor().(*AccountActor)
+	restoredAccount := &AccountActor{}
+	err = restoredAccount.RestoreFromSnapshot(ctx, snapshot)
 
 	require.NoError(t, err)
 	require.Equal(t, "PersistentAccount", restoredAccount.Name)
@@ -89,4 +138,66 @@ func TestActorPersistence(t *testing.T) {
 	require.IsType(t, &game.GatherAction{}, char.Action)
 	gatherAction := char.Action.(*game.GatherAction)
 	require.Equal(t, game.Wood, gatherAction.Resource)
+}
+
+func TestReplayTicks(t *testing.T) {
+	testhelper.SetupTestLogger(testing.Verbose())
+	resource := game.Resource{Name: "test_resource", Experience: 10, Difficulty: 0.0, CooldownMultiplier: 1.0, BatchSize: [2]int{1, 1}}
+	ctx := context.Background()
+	actor := &AccountActor{
+		ID:         uuid.New(),
+		Name:       "TestAccount",
+		Characters: newCharacterStore(),
+	}
+	character := game.Character{
+		ID:   uuid.New(),
+		Name: "TestCharacter",
+		Action: &game.GatherAction{
+			Resource: resource,
+		},
+		Experience: 0,
+		Inventory:  game.NewInventory(),
+	}
+	actor.Characters.characters[character.ID] = character
+
+	since := time.Now().Add(-15 * time.Second).Unix()
+
+	require.Equal(t, 0, character.Experience)
+	require.Equal(t, 0, character.Inventory.GetResource(resource))
+
+	actor.ReplayTicks(ctx, since)
+	character = actor.Characters.characters[character.ID]
+
+	require.Equal(t, 3, character.Inventory.GetResource(resource))
+	require.Equal(t, 30, character.Experience)
+}
+
+func TestAccountJSONRoundTrip(t *testing.T) {
+	account := &AccountActor{
+		ID:   uuid.New(),
+		Name: "TestAccount",
+		Characters: &characterStore{
+			mx: &sync.Mutex{},
+			characters: map[uuid.UUID]game.Character{
+				uuid.New(): {
+					ID:         uuid.New(),
+					Name:       "TestCharacter",
+					Level:      5,
+					Experience: 1500,
+					Status:     game.StatusBusy,
+					Cooldown:   2,
+					Action: &game.GatherAction{
+						Resource: game.Wood,
+					},
+				},
+			},
+		},
+	}
+
+	raw, err := json.Marshal(account)
+	require.NoError(t, err)
+
+	var unmarshaledAccount AccountActor
+	err = json.Unmarshal(raw, &unmarshaledAccount)
+	require.NoError(t, err)
 }

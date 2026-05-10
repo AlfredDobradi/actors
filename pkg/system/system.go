@@ -40,6 +40,10 @@ type Actor interface {
 	RestoreFromSnapshot(context.Context, database.Snapshot) error
 }
 
+type Replayer interface {
+	Replay(context.Context, int64)
+}
+
 type Persister interface {
 	Persist(ctx context.Context, key string, value database.Snapshot) error
 }

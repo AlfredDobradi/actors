@@ -1,18 +1,20 @@
 package actor
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
+	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
 	"github.com/alfreddobradi/actors/examples/game/model"
 	"github.com/alfreddobradi/actors/pkg/database"
 	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
 )
 
@@ -21,17 +23,14 @@ type characterStore struct {
 	characters map[uuid.UUID]game.Character
 }
 
-func (s *characterStore) encode() ([]byte, error) {
+func (s *characterStore) processTick(ctx context.Context) {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	// Serialize the character store to a byte slice
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	if err := enc.Encode(s.characters); err != nil {
-		return nil, err
+	for id, character := range s.characters {
+		character.ProcessTick(ctx)
+		s.characters[id] = character
 	}
-	return buf.Bytes(), nil
 }
 
 type AccountActor struct {
@@ -51,7 +50,7 @@ func (h *AccountActor) GetKind() string {
 func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	switch payload := msg.GetBody().(type) {
 	case Tick:
-		// h.processTick(ctx)
+		h.ProcessTick(ctx)
 	case model.StartActionRequest:
 		// h.startAction(ctx, payload.CharacterID, payload.Action)
 	case model.StopActionRequest:
@@ -61,15 +60,15 @@ func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) s
 	case model.GetCharacterRequest:
 		// character := h.getCharacter(ctx, payload)
 		// if character != nil {
-		// 	slog.Info("Character found", "actorID", h.GetID(), "characterID", character.ID, "characterName", character.Name, "characterLevel", character.Level, "characterExperience", character.Experience, "characterStatus", character.Status)
+		// 	slog.Info("Character found", "actor_id", h.GetID(), "character_id", character.ID, "character_name", character.Name, "character_level", character.Level, "character_experience", character.Experience, "character_status", character.Status)
 		// 	if err := msg.Respond(h.GetID(), character); err != nil {
 		// 		slog.Warn("Failed to respond to request", "error", err)
 		// 	}
 		// } else {
-		// 	slog.Debug("Character not found", "actorID", h.GetID(), "characterName", payload.Name)
+		// 	slog.Debug("Character not found", "actor_id", h.GetID(), "character_name", payload.Name)
 		// }
 	default:
-		slog.Warn("Received message with unknown payload type", "actorID", h.GetID(), "messageID", msg.GetID(), "payloadType", fmt.Sprintf("%T", payload))
+		slog.Warn("Received message with unknown payload type", "actor_id", h.GetID(), "message_id", msg.GetID(), "payload_type", fmt.Sprintf("%T", payload))
 	}
 	return nil
 }
@@ -137,8 +136,35 @@ func (h *AccountActor) Start(ctx context.Context) {
 }
 
 func (h *AccountActor) Stop(ctx context.Context) error {
-	slog.Debug("Stopping account actor", "actorID", h.GetID())
+	slog.Debug("Stopping account actor", "actor_id", h.GetID())
 	return nil
+}
+
+func (h *AccountActor) ProcessTick(ctx context.Context) {
+	spanID := telemetry.SpanIDFromContext(ctx)
+
+	ctxLogger := slog.With("span_id", spanID)
+	ctxLogger.Debug("Processing tick in account actor", "actor_id", h.GetID())
+
+	h.Characters.processTick(ctx)
+}
+
+func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
+	spanID := telemetry.SpanIDFromContext(ctx)
+
+	ctxLogger := slog.With("span_id", spanID)
+
+	sinceTime := time.Unix(since, 0)
+	secondsSinceTime := time.Since(sinceTime).Seconds()
+	ticksSinceTime := int(math.Floor(secondsSinceTime / float64(game.TickRate)))
+
+	ctxLogger.Debug("Replaying ticks in account actor", "actor_id", h.GetID(), "since", sinceTime.Format(time.RFC3339), "ticks", ticksSinceTime)
+
+	for i := 0; i < ticksSinceTime; i++ {
+		h.ProcessTick(ctx)
+	}
+
+	ctxLogger.Debug("Finished replaying ticks in account actor", "actor_id", h.GetID(), "ticks_replayed", ticksSinceTime)
 }
 
 func newCharacterStore() *characterStore {
