@@ -9,6 +9,7 @@ import (
 )
 
 type Subscription struct {
+	ID      uuid.UUID
 	pattern regexp.Regexp
 	actorID uuid.UUID
 }
@@ -19,30 +20,39 @@ func NewSubscription(pattern string, actorID uuid.UUID) (*Subscription, error) {
 		return nil, fmt.Errorf("invalid subscription pattern: %w", err)
 	}
 	return &Subscription{
+		ID:      uuid.New(),
 		pattern: *re,
 		actorID: actorID,
 	}, nil
+}
+
+type Factory struct {
+	Fn    ActorFactory
+	Hooks []HookOpt
 }
 
 type Registry struct {
 	mx *sync.Mutex
 
 	actors    map[uuid.UUID]*ActorHandler
-	factories map[string]ActorFactory
+	factories map[string]*Factory
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
 		mx:        &sync.Mutex{},
 		actors:    make(map[uuid.UUID]*ActorHandler),
-		factories: make(map[string]ActorFactory),
+		factories: make(map[string]*Factory),
 	}
 }
 
-func (r *Registry) RegisterFactory(kind string, factory ActorFactory) {
+func (r *Registry) RegisterFactory(kind string, factory ActorFactory, opts ...HookOpt) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
-	r.factories[kind] = factory
+	r.factories[kind] = &Factory{
+		Fn:    factory,
+		Hooks: opts,
+	}
 }
 
 func (r *Registry) DeregisterFactory(kind string) {
@@ -54,5 +64,5 @@ func (r *Registry) DeregisterFactory(kind string) {
 func (r *Registry) Clear() {
 	r.mx.Lock()
 	defer r.mx.Unlock()
-	r.factories = make(map[string]ActorFactory)
+	r.factories = make(map[string]*Factory)
 }

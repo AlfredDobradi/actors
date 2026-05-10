@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/pkg/system"
+	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/google/uuid"
 )
 
@@ -23,7 +23,7 @@ func (s *Span) Context() context.Context {
 }
 
 func SpanIDFromContext(ctx context.Context) uuid.UUID {
-	if spanID, ok := ctx.Value(system.ContextKeySpanID).(uuid.UUID); ok {
+	if spanID, ok := ctx.Value(model.ContextKeySpanID).(uuid.UUID); ok {
 		return spanID
 	}
 
@@ -31,7 +31,7 @@ func SpanIDFromContext(ctx context.Context) uuid.UUID {
 }
 
 func SpanIDFromRequest(r *http.Request) uuid.UUID {
-	if spanID, ok := r.Context().Value(system.ContextKeySpanID).(uuid.UUID); ok {
+	if spanID, ok := r.Context().Value(model.ContextKeySpanID).(uuid.UUID); ok {
 		return spanID
 	}
 
@@ -40,12 +40,12 @@ func SpanIDFromRequest(r *http.Request) uuid.UUID {
 
 func SpanFromRequest(r *http.Request) *Span {
 	spanID := SpanIDFromRequest(r)
-	ctx := context.WithValue(r.Context(), system.ContextKeySpanID, spanID)
+	ctx := context.WithValue(r.Context(), model.ContextKeySpanID, spanID)
 	return &Span{id: spanID, context: ctx}
 }
 
 func SpanFromContext(ctx context.Context) *Span {
 	spanID := SpanIDFromContext(ctx)
-	ctx = context.WithValue(ctx, system.ContextKeySpanID, spanID)
+	ctx = context.WithValue(ctx, model.ContextKeySpanID, spanID)
 	return &Span{id: spanID, context: ctx}
 }

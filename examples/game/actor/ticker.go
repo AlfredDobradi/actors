@@ -2,17 +2,14 @@ package actor
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
-)
-
-const (
-	tickRate = 1 // ticks per second
 )
 
 type TickerActor struct {
@@ -40,23 +37,23 @@ func (h *TickerActor) GetKind() string {
 }
 
 func (h *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
-	slog.Info("Received message", "actorID", h.GetID(), "messageID", msg.GetID(), "responseTo", msg.GetResponseTo(), "payload", fmt.Sprintf("%v", msg.GetBody()))
+	// this actor should never receive any messages
 	return nil
 }
 
-func (h *TickerActor) Persist(ctx context.Context, db database.DB) error {
+func (h *TickerActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
 	// noop - this actor doesn't have any state to persist
-	return nil
+	return database.Snapshot{}, nil
 }
 
-func (h *TickerActor) Restore(ctx context.Context, db database.DB) error {
+func (h *TickerActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	// noop - this actor doesn't have any state to restore
 	return nil
 }
 
 func (h *TickerActor) tickCallback(ctx context.Context) error {
 	spanID := uuid.New()
-	sctx := context.WithValue(ctx, system.ContextKeySpanID, spanID)
+	sctx := context.WithValue(ctx, model.ContextKeySpanID, spanID)
 
 	slog.Debug("Sending tick message", "span_id", spanID, "actorID", h.GetID())
 
@@ -83,7 +80,6 @@ func (h *TickerActor) Start(ctx context.Context) {
 					slog.Error("Failed to send tick message", "actorID", h.GetID(), "error", err)
 				}
 			case <-ctx.Done():
-				slog.Info("Stopping ticker actor", "actorID", h.GetID())
 				h.timer.Stop()
 				return
 			}
@@ -92,19 +88,19 @@ func (h *TickerActor) Start(ctx context.Context) {
 }
 
 func (h *TickerActor) Stop(ctx context.Context) error {
-	slog.Info("Stopping ticker actor", "actorID", h.GetID())
+	slog.Debug("Stopping ticker actor", "actorID", h.GetID())
 	h.timer.Stop()
 	return nil
 }
 
 func tickerActorFactory(ctx context.Context) system.Actor {
-	interval := time.Second / tickRate
+	interval := time.Second / game.TickRate
 
 	slog.Debug("starting ticker actor", "interval_ms", interval.Milliseconds())
 
 	return &TickerActor{
 		ID:           uuid.New(),
 		timer:        time.NewTicker(interval),
-		sendCallback: ctx.Value(system.ContextKeySenderFn).(system.SenderFunc),
+		sendCallback: ctx.Value(model.ContextKeySenderFn).(system.SenderFunc),
 	}
 }

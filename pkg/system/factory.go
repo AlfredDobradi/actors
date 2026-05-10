@@ -2,7 +2,9 @@ package system
 
 import "log/slog"
 
-func WithPreStartHook(hook Hook) HandlerOpt {
+type HookOpt func(h *ActorHandler, sys *System)
+
+func WithPreStartHook(hook Hook) HookOpt {
 	return func(h *ActorHandler, _ *System) {
 		if h.preStartHooks == nil {
 			h.preStartHooks = NewHookCollection(HookPreStart)
@@ -11,7 +13,7 @@ func WithPreStartHook(hook Hook) HandlerOpt {
 	}
 }
 
-func WithPostStartHook(hook Hook) HandlerOpt {
+func WithPostStartHook(hook Hook) HookOpt {
 	return func(h *ActorHandler, _ *System) {
 		if h.postStartHooks == nil {
 			h.postStartHooks = NewHookCollection(HookPostStart)
@@ -20,7 +22,7 @@ func WithPostStartHook(hook Hook) HandlerOpt {
 	}
 }
 
-func WithPoisonedHook(hook Hook) HandlerOpt {
+func WithPoisonedHook(hook Hook) HookOpt {
 	return func(h *ActorHandler, _ *System) {
 		if h.poisonedHooks == nil {
 			h.poisonedHooks = NewHookCollection(HookPoisoned)
@@ -29,7 +31,7 @@ func WithPoisonedHook(hook Hook) HandlerOpt {
 	}
 }
 
-func WithTerminatedHook(hook Hook) HandlerOpt {
+func WithTerminatedHook(hook Hook) HookOpt {
 	return func(h *ActorHandler, _ *System) {
 		if h.terminatedHooks == nil {
 			h.terminatedHooks = NewHookCollection(HookTerminated)
@@ -38,7 +40,7 @@ func WithTerminatedHook(hook Hook) HandlerOpt {
 	}
 }
 
-func WithCrashHook(hook Hook) HandlerOpt {
+func WithCrashHook(hook Hook) HookOpt {
 	return func(h *ActorHandler, _ *System) {
 		if h.crashHooks == nil {
 			h.crashHooks = NewHookCollection(HookCrash)
@@ -49,8 +51,11 @@ func WithCrashHook(hook Hook) HandlerOpt {
 
 func WithSubscription(pattern string) HandlerOpt {
 	return func(h *ActorHandler, sys *System) {
-		if err := sys.Subscribe(pattern, h.actor.GetID()); err != nil {
+		if subID, err := sys.Subscribe(pattern, h.actor.GetID()); err != nil {
 			slog.Warn("Failed to subscribe actor to pattern", "pattern", pattern, "actorID", h.actor.GetID(), "error", err)
+		} else {
+			slog.Debug("Subscribed actor to pattern", "pattern", pattern, "actorID", h.actor.GetID(), "subscriptionID", subID)
+			h.subscriptions = append(h.subscriptions, subID)
 		}
 	}
 }

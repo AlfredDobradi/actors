@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,9 @@ func TestRegistrySpawn(t *testing.T) {
 		return &MockActor{id: uuid.New(), kind: "testActor"}
 	})
 
-	sys := system.MustNewSystem(registry, nil)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	ctx := context.Background()
 	handler, err := sys.Spawn(ctx, "testActor")

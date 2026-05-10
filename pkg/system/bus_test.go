@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -23,12 +24,16 @@ type MockBusActor struct {
 	messages []string
 }
 
-func (a *MockBusActor) GetID() uuid.UUID                                  { return a.ID }
-func (a *MockBusActor) GetKind() string                                   { return "MockBusActor" }
-func (a *MockBusActor) Start(ctx context.Context)                         {}
-func (a *MockBusActor) Stop(ctx context.Context) error                    { return nil }
-func (a *MockBusActor) Persist(ctx context.Context, db database.DB) error { return nil }
-func (a *MockBusActor) Restore(ctx context.Context, db database.DB) error { return nil }
+func (a *MockBusActor) GetID() uuid.UUID               { return a.ID }
+func (a *MockBusActor) GetKind() string                { return "MockBusActor" }
+func (a *MockBusActor) Start(ctx context.Context)      {}
+func (a *MockBusActor) Stop(ctx context.Context) error { return nil }
+func (a *MockBusActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
+	return database.Snapshot{}, nil
+}
+func (a *MockBusActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
+	return nil
+}
 func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	a.mx.Lock()
 	slog.Debug("MockBusActor handling message", "actorID", a.GetID(), "messageID", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))
@@ -54,7 +59,9 @@ func TestRouting(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
-	sys := system.MustNewSystem(registry, nil)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handlerFoo, err := sys.Spawn(context.Background(), mockBusActorKind)
 	if err != nil {
@@ -65,11 +72,11 @@ func TestRouting(t *testing.T) {
 		t.Fatalf("Failed to spawn actor: %v", err)
 	}
 
-	err = sys.Subscribe("^foo", handlerFoo.GetActor().GetID())
+	_, err = sys.Subscribe("^foo", handlerFoo.GetActor().GetID())
 	if err != nil {
 		t.Fatalf("Failed to subscribe actor: %v", err)
 	}
-	err = sys.Subscribe("bar$", handlerBar.GetActor().GetID())
+	_, err = sys.Subscribe("bar$", handlerBar.GetActor().GetID())
 	if err != nil {
 		t.Fatalf("Failed to subscribe actor: %v", err)
 	}

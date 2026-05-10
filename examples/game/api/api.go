@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/alfreddobradi/actors/examples/game/api/middleware"
-	"github.com/alfreddobradi/actors/examples/game/config"
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/pkg/config"
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/gorilla/mux"
 )
@@ -40,7 +40,6 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	}
 
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("not found", "method", r.Method, "path", r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Not found"))
 	})

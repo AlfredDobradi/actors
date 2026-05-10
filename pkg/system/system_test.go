@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -47,11 +48,11 @@ func (m *MockActor) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockActor) Persist(ctx context.Context, db database.DB) error {
-	return nil
+func (m *MockActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
+	return database.Snapshot{}, nil
 }
 
-func (m *MockActor) Restore(ctx context.Context, db database.DB) error {
+func (m *MockActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	return nil
 }
 
@@ -124,13 +125,16 @@ func TestPreStartHookExecution(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
+		system.WithPreStartHook(tracker.CreateHook("preStart")),
+	)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithPreStartHook(tracker.CreateHook("preStart")),
 	)
 	require.NoError(t, err)
 
@@ -155,13 +159,18 @@ func TestPostStartHookExecution(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(
+		actor.GetKind(),
+		func(ctx context.Context) system.Actor { return actor },
+		system.WithPostStartHook(tracker.CreateHook("postStart")),
+	)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithPostStartHook(tracker.CreateHook("postStart")),
 	)
 	require.NoError(t, err)
 
@@ -190,16 +199,26 @@ func TestHookExecutionOrder(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
 
-	handler, err := sys.Spawn(
-		ctx,
-		actor.GetKind(),
+	callback := func(ctx context.Context) system.Actor {
+		return actor
+	}
+
+	hooks := []system.HookOpt{
 		system.WithPreStartHook(tracker.CreateHook("preStart")),
 		system.WithPostStartHook(tracker.CreateHook("postStart")),
 		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated")),
+	}
+
+	registry.RegisterFactory(actor.GetKind(), callback, hooks...)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
+
+	handler, err := sys.Spawn(
+		ctx,
+		actor.GetKind(),
 	)
 	require.NoError(t, err)
 
@@ -246,14 +265,16 @@ func TestPoisonedHookExecution(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
+		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
+		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")),
 	)
 	require.NoError(t, err)
 
@@ -281,13 +302,15 @@ func TestTerminatedHookExecution(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
+		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")),
 	)
 	require.NoError(t, err)
 
@@ -319,14 +342,16 @@ func TestCrashHookExecution(t *testing.T) {
 	actor.returnsRecovable = false // Make the crash non-recoverable
 
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
+		system.WithCrashHook(tracker.CreateHook("crash")),
+		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithCrashHook(tracker.CreateHook("crash")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")),
 	)
 	require.NoError(t, err)
 
@@ -362,15 +387,17 @@ func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
+		system.WithCrashHook(tracker.CreateHook("crash")),
+		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
+		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithCrashHook(tracker.CreateHook("crash")),
-		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")),
 	)
 	require.NoError(t, err)
 
@@ -393,15 +420,17 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 
 	actor := NewMockActor("test")
 	registry := system.NewRegistry()
-	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
+		system.WithTerminatedHook(tracker.CreateHook("terminated1")),
+		system.WithTerminatedHook(tracker.CreateHook("terminated2")),
+		system.WithTerminatedHook(tracker.CreateHook("terminated3")))
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,
 		actor.GetKind(),
-		system.WithTerminatedHook(tracker.CreateHook("terminated1")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated2")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated3")),
 	)
 	require.NoError(t, err)
 
@@ -431,7 +460,9 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
-	sys := system.MustNewSystem(registry, nil)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
 
 	handler, err := sys.Spawn(
 		ctx,

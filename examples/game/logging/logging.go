@@ -3,45 +3,43 @@ package logging
 import (
 	"log/slog"
 	"os"
-)
 
-var (
-	LogLevel  = slog.LevelDebug
-	LogFormat = "json"
+	"github.com/alfreddobradi/actors/pkg/config"
 )
 
 func Init() {
-	if level := os.Getenv("LOG_LEVEL"); level != "" {
-		switch level {
-		case "debug":
-			LogLevel = slog.LevelDebug
-		case "info":
-			LogLevel = slog.LevelInfo
-		case "error":
-			LogLevel = slog.LevelError
-		default:
-			slog.Warn("Invalid LOG_LEVEL, defaulting to debug", "providedLevel", level)
-			LogLevel = slog.LevelDebug
-		}
+	loggingConfig := config.GetConfig().Logging
+	level := slog.LevelInfo
+
+	switch loggingConfig.Level {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "error":
+		level = slog.LevelError
+	default:
+		slog.Warn("Invalid log level in config", "provided", loggingConfig.Level)
+		level = slog.LevelDebug
 	}
 
-	if format := os.Getenv("LOG_FORMAT"); format != "" {
-		LogFormat = format
-	}
 	var handler slog.Handler
-	switch LogFormat {
+	switch loggingConfig.Format {
 	case "json":
 		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: LogLevel,
+			Level:     level,
+			AddSource: loggingConfig.AddSource,
 		})
 	case "text":
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: LogLevel,
+			Level:     level,
+			AddSource: loggingConfig.AddSource,
 		})
 	default:
-		slog.Warn("Invalid LOG_FORMAT, defaulting to json", "providedFormat", LogFormat)
+		slog.Warn("Invalid log format in config, defaulting to json", "provided", loggingConfig.Format)
 		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: LogLevel,
+			Level:     level,
+			AddSource: loggingConfig.AddSource,
 		})
 	}
 

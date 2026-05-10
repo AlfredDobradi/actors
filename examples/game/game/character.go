@@ -8,7 +8,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
 )
 
@@ -49,6 +49,15 @@ func (inv *Inventory) AddResource(resource Resource, quantity int) {
 	}
 
 	inv.resources[resource.Name] += quantity
+}
+
+func (inv *Inventory) GetResource(resource Resource) int {
+	inv.mx.Lock()
+	defer inv.mx.Unlock()
+	if inv.resources == nil {
+		return 0
+	}
+	return inv.resources[resource.Name]
 }
 
 type Tavern struct {
@@ -161,6 +170,7 @@ func NewCharacter(name string) Character {
 }
 
 func (c *Character) GainExperience(amount int) {
+	slog.Debug("Character is gaining experience", "characterID", c.ID, "characterName", c.Name, "amount", amount, "currentExperience", c.Experience)
 	c.Experience += amount
 	for i := 0; c.Experience >= xpForLevel(i+1); i++ {
 		c.Level = i + 1

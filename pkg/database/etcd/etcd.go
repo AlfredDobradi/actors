@@ -2,12 +2,14 @@ package etcd
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/database"
-	"github.com/alfreddobradi/actors/examples/game/telemetry"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/telemetry"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -31,14 +33,19 @@ func New(endpoints []string) (*Store, error) {
 
 func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	span := telemetry.SpanFromContext(ctx)
-	span.GetLogger().Info("Setting key in database", "key", key)
+	span.GetLogger().Debug("Setting key in database", "key", key)
+
+	fields := []any{"key", key}
 
 	opts := []clientv3.OpOption{}
 	if database.UseLease(ctx) {
+		fields = append(fields, "lease_id", s.sessionID)
 		opts = append(opts, clientv3.WithLease(clientv3.LeaseID(s.sessionID)))
 	}
 
-	_, err := s.Client.Put(ctx, key, value.String(), opts...)
+	slog.Debug("Setting key in database", fields...)
+
+	_, err := s.Client.Put(context.Background(), key, value.String(), opts...)
 	return err
 }
 
@@ -98,12 +105,42 @@ func (s *Store) Keys(ctx context.Context) []string {
 	return keys
 }
 
-func (s *Store) Persist(ctx context.Context) error {
-	return nil
+func (s *Store) Persist(ctx context.Context, key string, value database.Snapshot) error {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Persisting snapshot in database", "key", key, "timestamp", value.Timestamp)
+
+	_, err := s.Client.Put(ctx, key, value.String())
+	return err
 }
 
-func (s *Store) Load(ctx context.Context) error {
-	return nil
+func (s *Store) Restore(ctx context.Context, key string) (database.Snapshot, error) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Restoring snapshot from database", "key", key)
+
+	resp, err := s.Client.Get(ctx, key)
+	if err != nil || len(resp.Kvs) == 0 {
+		return database.Snapshot{}, fmt.Errorf("snapshot not found for key: %s", key)
+	}
+	val := string(resp.Kvs[0].Value)
+
+	var snapshot database.Snapshot
+	aux := map[string]any{}
+	if err := json.Unmarshal([]byte(val), &aux); err != nil {
+		return database.Snapshot{}, fmt.Errorf("failed to unmarshal snapshot: %w", err)
+	}
+
+	if timestamp, ok := aux["timestamp"].(float64); ok {
+		snapshot.Timestamp = int64(timestamp)
+	}
+	if data, ok := aux["data"].(string); ok {
+		decoded, err := base64.URLEncoding.DecodeString(data)
+		if err != nil {
+			return database.Snapshot{}, fmt.Errorf("failed to decode snapshot data: %w", err)
+		}
+		snapshot.Data = decoded
+	}
+
+	return snapshot, nil
 }
 
 func init() {
@@ -128,15 +165,13 @@ func (s *Store) KeepAlive(ctx context.Context, callback func(any)) error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		for resp := range ch {
-			if resp == nil {
-				slog.Warn("Keepalive channel closed", "session_id", s.sessionID)
-				return
-			}
-			callback(resp)
+	for resp := range ch {
+		if resp == nil {
+			slog.Warn("Keepalive channel closed", "session_id", s.sessionID)
+			return nil
 		}
-	}()
+		callback(resp)
+	}
 	return nil
 }
 

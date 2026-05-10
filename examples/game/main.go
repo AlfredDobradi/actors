@@ -6,31 +6,26 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/actor"
 	"github.com/alfreddobradi/actors/examples/game/api"
-	"github.com/alfreddobradi/actors/examples/game/config"
-	"github.com/alfreddobradi/actors/examples/game/database"
-	"github.com/alfreddobradi/actors/examples/game/database/etcd"
 	"github.com/alfreddobradi/actors/examples/game/logging"
+	"github.com/alfreddobradi/actors/pkg/config"
+	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/etcd"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/joho/godotenv"
 )
 
-const (
-	topicCharacter = "character"
-	topicTicks     = "ticks"
-)
-
 func main() {
 	godotenv.Load()
-	logging.Init()
 
 	if err := config.Load("./config.yaml"); err != nil {
 		slog.Error("Failed to load config", "error", err)
 		os.Exit(1)
 	}
+
+	logging.Init()
 
 	registry := system.NewRegistry()
 	actor.InitFactories(registry)
@@ -56,37 +51,20 @@ func main() {
 	apiServer := api.NewServer(sys, db)
 	go apiServer.Start()
 
-	characterStore, err := sys.Spawn(ctx, "CharacterStore",
-		system.WithSubscription(topicTicks),
-		system.WithSubscription(topicCharacter),
-	)
-	if err != nil {
-		slog.Error("Failed to spawn actor", "error", err)
-		return
-	}
-
 	handlerTicker, err := sys.Spawn(ctx, "TickerActor")
 	if err != nil {
 		slog.Error("Failed to spawn actor", "error", err)
 		return
 	}
 
-	slog.Info("Actors spawned successfully", "tickerActorID", handlerTicker.GetActor().GetID(), "characterStoreID", characterStore.GetActor().GetID())
+	slog.Info("Actors spawned successfully", "tickerActorID", handlerTicker.GetActor().GetID())
 
 	// Wait for interrupt signal (Ctrl+C)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	slog.Info("Interrupt received, stopping actor")
-	handlerTicker.Stop()
-	handlerTicker.WaitForTermination()
-
-	time.Sleep(2 * time.Second) // Wait for ticker to stop before stopping character store
-
-	characterStore.Stop()
-	characterStore.WaitForTermination()
-
+	slog.Info("Interrupt received, shutting down")
 	apiServer.Shutdown(ctx)
 	sys.Shutdown(ctx)
 	db.Close(ctx)
