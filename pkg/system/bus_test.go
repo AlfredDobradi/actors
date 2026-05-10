@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -155,6 +156,124 @@ func TestRouting(t *testing.T) {
 	handlerBar.WaitForTermination()
 }
 
-func TestRequestReply(t *testing.T) {
+func TestSubscribe(t *testing.T) {
+	bus := system.NewBus()
 
+	fooID := uuid.New()
+	barID := uuid.New()
+
+	groupID1, err := bus.Subscribe("^foo", fooID)
+	require.NoError(t, err)
+
+	groupID2, err := bus.Subscribe("^foo", barID)
+	require.NoError(t, err)
+
+	require.Equal(t, groupID1, groupID2)
+
+	groupID3, err := bus.Subscribe("bar$", barID)
+	require.NoError(t, err)
+
+	require.NotEqual(t, groupID1, groupID3)
+
+	groups := bus.GetSubscriptionGroups()
+	require.Len(t, groups, 2)
+
+	group1, ok := groups[groupID1]
+	require.True(t, ok)
+	require.Equal(t, "^foo", group1.GetPattern().String())
+	require.Contains(t, group1.GetActors(), fooID)
+	require.Contains(t, group1.GetActors(), barID)
+
+	group2, ok := groups[groupID3]
+	require.True(t, ok)
+	require.Equal(t, "bar$", group2.GetPattern().String())
+	require.Contains(t, group2.GetActors(), barID)
+}
+
+func TestUnsubscribe(t *testing.T) {
+	bus := system.NewBus()
+
+	fooID := uuid.New()
+	barID := uuid.New()
+
+	groupID1, err := bus.Subscribe("^foo", fooID)
+	require.NoError(t, err)
+
+	_, err = bus.Subscribe("^foo", barID)
+	require.NoError(t, err)
+
+	err = bus.Unsubscribe(groupID1, fooID)
+	require.NoError(t, err)
+
+	groups := bus.GetSubscriptionGroups()
+	require.Len(t, groups, 1)
+
+	group1, ok := groups[groupID1]
+	require.True(t, ok)
+	require.Equal(t, "^foo", group1.GetPattern().String())
+	require.NotContains(t, group1.GetActors(), fooID)
+	require.Contains(t, group1.GetActors(), barID)
+
+	err = bus.Unsubscribe(groupID1, barID)
+	require.NoError(t, err)
+
+	groups = bus.GetSubscriptionGroups()
+	require.Len(t, groups, 0)
+}
+
+func generateSubscriptions(b *testing.B, n int) []*system.Subscription {
+	patternText := []string{
+		"foo",
+		"bar",
+		"baz",
+		"qux",
+		"quux",
+	}
+	subs := make([]*system.Subscription, n)
+	for i := 0; i < n; i++ {
+		text := patternText[i%5]
+		sub, err := system.NewSubscription(text, uuid.New())
+		require.NoError(b, err)
+		subs[i] = sub
+	}
+	return subs
+}
+
+func BenchmarkRoutingSingular(b *testing.B) {
+	n := 1000
+	subs := generateSubscriptions(b, n)
+
+	topic := "foo"
+
+	for i := 0; i < b.N; i++ {
+		for _, sub := range subs {
+			if sub.GetPattern().MatchString(topic) {
+				slog.Debug("matched subscription", "pattern", sub.GetPattern().String())
+				continue
+			}
+		}
+	}
+}
+
+func BenchmarkRoutingGrouped(b *testing.B) {
+	n := 1000
+	subs := generateSubscriptions(b, n)
+
+	subsGrouped := make(map[string][]*system.Subscription)
+	for _, sub := range subs {
+		subsGrouped[sub.GetPattern().String()] = append(subsGrouped[sub.GetPattern().String()], sub)
+	}
+
+	topic := "foo"
+
+	for i := 0; i < b.N; i++ {
+		for patternStr := range subsGrouped {
+			pattern, err := regexp.Compile(patternStr)
+			require.NoError(b, err)
+			if pattern.MatchString(topic) {
+				slog.Debug("matched subscription", "pattern", pattern.String())
+				continue
+			}
+		}
+	}
 }

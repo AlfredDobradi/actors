@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -65,20 +66,58 @@ func (m *Message) Respond(sender uuid.UUID, payload any) error {
 	return nil
 }
 
+type SubscriptionGroup struct {
+	id      uuid.UUID
+	pattern *regexp.Regexp
+	actors  map[uuid.UUID]struct{}
+}
+
+func NewSubscriptionGroup(pattern string) (*SubscriptionGroup, error) {
+	// generate an id deterministically based on the pattern
+	id := uuid.NewSHA1(uuid.NameSpaceOID, []byte(pattern))
+
+	compiledPattern, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile subscription pattern: %w", err)
+	}
+
+	return &SubscriptionGroup{
+		id:      id,
+		pattern: compiledPattern,
+		actors:  make(map[uuid.UUID]struct{}),
+	}, nil
+}
+
+func (g *SubscriptionGroup) AddActor(actorID uuid.UUID) {
+	g.actors[actorID] = struct{}{}
+}
+
+func (g *SubscriptionGroup) GetID() uuid.UUID {
+	return g.id
+}
+
+func (g *SubscriptionGroup) GetPattern() *regexp.Regexp {
+	return g.pattern
+}
+
+func (g *SubscriptionGroup) GetActors() map[uuid.UUID]struct{} {
+	return g.actors
+}
+
 type Bus struct {
 	inbox chan any
 	stop  chan struct{}
 
-	subscriptions []Subscription
-	routeFn       func(actorID uuid.UUID, msg *Message) error
+	subscriptionGroups map[uuid.UUID]*SubscriptionGroup
+	routeFn            func(actorID uuid.UUID, msg *Message) error
 }
 
 func NewBus() *Bus {
 	bus := &Bus{
-		inbox:         make(chan any, 100),
-		stop:          make(chan struct{}),
-		subscriptions: make([]Subscription, 0),
-		routeFn:       nil,
+		inbox:              make(chan any, 100),
+		stop:               make(chan struct{}),
+		subscriptionGroups: make(map[uuid.UUID]*SubscriptionGroup),
+		routeFn:            nil,
 	}
 
 	go bus.Start()
@@ -186,17 +225,20 @@ func (b *Bus) Request(ctx context.Context, sender uuid.UUID, recipient Recipient
 }
 
 func (b *Bus) Route(ctx context.Context, msg *Message) error {
-	for _, sub := range b.subscriptions {
+	for _, group := range b.subscriptionGroups {
 		subject := strings.TrimPrefix(msg.GetRecipient().String(), "topic:")
-		matches := sub.pattern.MatchString(subject)
+		matches := group.GetPattern().MatchString(subject)
 		ctxLogger := slog.With("span_id", ctx.Value(model.ContextKeySpanID))
-		ctxLogger.Debug("Routing message", "messageID", msg.GetID(), "recipient", msg.GetRecipient().String(), "subscriptionPattern", sub.pattern.String(), "matches", matches)
+		ctxLogger.Debug("Routing message", "messageID", msg.GetID(), "recipient", msg.GetRecipient().String(), "subscriptionPattern", group.GetPattern().String(), "matches", matches)
 		if matches {
+			actors := group.GetActors()
 			if b.routeFn != nil {
-				err := b.routeFn(sub.actorID, msg)
-				if err != nil {
-					ctxLogger.Error("Failed to route message", "messageID", msg.GetID(), "error", err)
-					return err
+				for actorID := range actors {
+					err := b.routeFn(actorID, msg)
+					if err != nil {
+						ctxLogger.Error("Failed to route message", "messageID", msg.GetID(), "error", err)
+						return err
+					}
 				}
 			} else {
 				ctxLogger.Warn("No routing function defined, message will not be delivered", "messageID", msg.GetID())
@@ -211,23 +253,42 @@ func (b *Bus) SetRouteFunction(routeFn func(actorID uuid.UUID, msg *Message) err
 	b.routeFn = routeFn
 }
 
-func (b *Bus) Subscribe(pattern string, actorID uuid.UUID) (uuid.UUID, error) {
-	sub, err := NewSubscription(pattern, actorID)
-	if err != nil {
-		return uuid.Nil, err
+func (b *Bus) GetSubscriptionGroups() map[uuid.UUID]*SubscriptionGroup {
+	return b.subscriptionGroups
+}
+
+func (b *Bus) UpdateSubscriptionGroup(group *SubscriptionGroup) {
+	if existingGroup, ok := b.subscriptionGroups[group.GetID()]; ok {
+		for actorID := range group.GetActors() {
+			existingGroup.AddActor(actorID)
+		}
+		return
 	}
 
-	b.subscriptions = append(b.subscriptions, *sub)
-	return sub.ID, nil
+	b.subscriptionGroups[group.GetID()] = group
+}
+
+func (b *Bus) Subscribe(pattern string, actorID uuid.UUID) (uuid.UUID, error) {
+	subscriptionGroup, err := NewSubscriptionGroup(pattern)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create subscription group: %w", err)
+	}
+
+	subscriptionGroup.AddActor(actorID)
+	b.UpdateSubscriptionGroup(subscriptionGroup)
+
+	return subscriptionGroup.GetID(), nil
 }
 
 func (b *Bus) Unsubscribe(subscriptionID uuid.UUID, actorID uuid.UUID) error {
-	for i, sub := range b.subscriptions {
-		if sub.ID == subscriptionID && sub.actorID == actorID {
-			b.subscriptions = append(b.subscriptions[:i], b.subscriptions[i+1:]...)
-			slog.Debug("Unsubscribed actor from topic", "actorID", actorID, "subscriptionID", subscriptionID, "pattern", sub.pattern.String())
-			return nil
+	if sub, ok := b.subscriptionGroups[subscriptionID]; ok {
+		delete(sub.actors, actorID)
+		slog.Debug("Unsubscribed actor from topic", "actorID", actorID, "subscriptionID", subscriptionID, "pattern", sub.GetPattern().String())
+		if len(sub.actors) == 0 {
+			delete(b.subscriptionGroups, subscriptionID)
+			slog.Debug("Deleted subscription group as it has no more actors", "subscriptionID", subscriptionID, "pattern", sub.GetPattern().String())
 		}
+		return nil
 	}
 
 	return fmt.Errorf("subscription not found for ID %s and actorID %s", subscriptionID, actorID)
