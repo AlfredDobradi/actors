@@ -10,7 +10,7 @@ import (
 
 type Subscription struct {
 	ID      uuid.UUID
-	pattern regexp.Regexp
+	pattern *regexp.Regexp
 	actorID uuid.UUID
 }
 
@@ -21,9 +21,13 @@ func NewSubscription(pattern string, actorID uuid.UUID) (*Subscription, error) {
 	}
 	return &Subscription{
 		ID:      uuid.New(),
-		pattern: *re,
+		pattern: re,
 		actorID: actorID,
 	}, nil
+}
+
+func (s *Subscription) GetPattern() *regexp.Regexp {
+	return s.pattern
 }
 
 type Factory struct {
