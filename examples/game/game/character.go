@@ -60,11 +60,6 @@ func (inv *Inventory) GetResource(resource Resource) int {
 	return inv.resources[resource.Name]
 }
 
-type Tavern struct {
-	ID   uuid.UUID
-	Name string
-}
-
 type Character struct {
 	ID         uuid.UUID `json:"id"`
 	Name       string    `json:"name"`

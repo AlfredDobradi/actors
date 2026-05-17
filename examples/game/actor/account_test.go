@@ -3,7 +3,6 @@ package actor
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +21,25 @@ type ID struct {
 
 func (id ID) GetID() uuid.UUID {
 	return id.ID
+}
+
+func TestNewAccountHasNoTavern(t *testing.T) {
+	testhelper.SetupTestLogger(testing.Verbose())
+	ctx := context.Background()
+	registry := system.NewRegistry()
+	registry.RegisterFactory("AccountActor", accountActorFactory)
+	db, err := memory.NewStore()
+	require.NoError(t, err)
+	sys := system.MustNewSystem(registry, db)
+
+	params := model.AccountActorParams{Name: "TestAccount"}
+	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
+	require.NoError(t, err)
+	require.NotNil(t, actorHandler)
+
+	actor := actorHandler.GetActor().(*AccountActor)
+	require.Equal(t, "TestAccount", actor.Name)
+	require.Nil(t, actor.Tavern)
 }
 
 func TestAccountActorFactory(t *testing.T) {
@@ -102,7 +120,7 @@ func TestActorPersistence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, actorHandler)
 
-	character := game.Character{
+	character := &game.Character{
 		ID:   uuid.New(),
 		Name: "TestCharacter",
 		Action: &game.GatherAction{
@@ -115,9 +133,8 @@ func TestActorPersistence(t *testing.T) {
 	character.Cooldown = 3
 
 	actor := actorHandler.GetActor().(*AccountActor)
-	actor.Characters.mx.Lock()
-	actor.Characters.characters[character.ID] = character
-	actor.Characters.mx.Unlock()
+	actor.Tavern = game.NewTavern()
+	actor.Tavern.AddCharacter(character)
 
 	snapshot, err := actorHandler.GetActor().Snapshot(ctx)
 	require.NoError(t, err)
@@ -127,9 +144,10 @@ func TestActorPersistence(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "PersistentAccount", restoredAccount.Name)
-	require.NotNil(t, restoredAccount.Characters)
+	require.NotNil(t, restoredAccount.Tavern)
 
-	char := restoredAccount.Characters.characters[character.ID]
+	char, exists := restoredAccount.Tavern.GetCharacter(character.ID)
+	require.True(t, exists)
 	require.Equal(t, 1000, char.Experience)
 	require.Equal(t, "TestCharacter", char.Name)
 	require.Equal(t, game.StatusBusy, char.Status)
@@ -145,11 +163,11 @@ func TestReplayTicks(t *testing.T) {
 	resource := game.Resource{Name: "test_resource", Experience: 10, Difficulty: 0.0, CooldownMultiplier: 1.0, BatchSize: [2]int{1, 1}}
 	ctx := context.Background()
 	actor := &AccountActor{
-		ID:         uuid.New(),
-		Name:       "TestAccount",
-		Characters: newCharacterStore(),
+		ID:     uuid.New(),
+		Name:   "TestAccount",
+		Tavern: game.NewTavern(),
 	}
-	character := game.Character{
+	character := &game.Character{
 		ID:   uuid.New(),
 		Name: "TestCharacter",
 		Action: &game.GatherAction{
@@ -158,7 +176,7 @@ func TestReplayTicks(t *testing.T) {
 		Experience: 0,
 		Inventory:  game.NewInventory(),
 	}
-	actor.Characters.characters[character.ID] = character
+	actor.Tavern.AddCharacter(character)
 
 	since := time.Now().Add(-15 * time.Second).Unix()
 
@@ -166,7 +184,8 @@ func TestReplayTicks(t *testing.T) {
 	require.Equal(t, 0, character.Inventory.GetResource(resource))
 
 	actor.ReplayTicks(ctx, since)
-	character = actor.Characters.characters[character.ID]
+	character, exists := actor.Tavern.GetCharacter(character.ID)
+	require.True(t, exists)
 
 	require.Equal(t, 3, character.Inventory.GetResource(resource))
 	require.Equal(t, 30, character.Experience)
@@ -174,25 +193,24 @@ func TestReplayTicks(t *testing.T) {
 
 func TestAccountJSONRoundTrip(t *testing.T) {
 	account := &AccountActor{
-		ID:   uuid.New(),
-		Name: "TestAccount",
-		Characters: &characterStore{
-			mx: &sync.Mutex{},
-			characters: map[uuid.UUID]game.Character{
-				uuid.New(): {
-					ID:         uuid.New(),
-					Name:       "TestCharacter",
-					Level:      5,
-					Experience: 1500,
-					Status:     game.StatusBusy,
-					Cooldown:   2,
-					Action: &game.GatherAction{
-						Resource: game.Wood,
-					},
-				},
-			},
+		ID:     uuid.New(),
+		Name:   "TestAccount",
+		Tavern: game.NewTavern(),
+	}
+
+	character := &game.Character{
+		ID:         uuid.New(),
+		Name:       "TestCharacter",
+		Level:      5,
+		Experience: 1500,
+		Status:     game.StatusBusy,
+		Cooldown:   2,
+		Action: &game.GatherAction{
+			Resource: game.Wood,
 		},
 	}
+
+	account.Tavern.AddCharacter(character)
 
 	raw, err := json.Marshal(account)
 	require.NoError(t, err)

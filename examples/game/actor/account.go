@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
@@ -18,25 +17,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type characterStore struct {
-	mx         *sync.Mutex
-	characters map[uuid.UUID]game.Character
-}
-
-func (s *characterStore) processTick(ctx context.Context) {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
-	for id, character := range s.characters {
-		character.ProcessTick(ctx)
-		s.characters[id] = character
-	}
-}
-
 type AccountActor struct {
-	ID         uuid.UUID
-	Name       string
-	Characters *characterStore
+	ID     uuid.UUID
+	Name   string
+	Tavern *game.Tavern
 }
 
 func (h *AccountActor) GetID() uuid.UUID {
@@ -85,9 +69,11 @@ func (h *AccountActor) UnmarshalJSON(data []byte) error {
 
 	h.ID = aux.ID
 	h.Name = aux.Name
-	h.Characters = &characterStore{
-		mx:         &sync.Mutex{},
-		characters: aux.Characters,
+
+	// TODO add an UnmarshalJSON method to Tavern
+	h.Tavern = game.NewTavern()
+	for _, character := range aux.Characters {
+		h.Tavern.AddCharacter(&character)
 	}
 
 	return nil
@@ -97,7 +83,7 @@ func (h *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) 
 	mapAccount := map[string]any{
 		"id":         h.ID,
 		"name":       h.Name,
-		"characters": h.Characters.characters,
+		"characters": h.Tavern.Characters(),
 	}
 	raw, err := json.Marshal(mapAccount)
 	if err != nil {
@@ -123,9 +109,9 @@ func (h *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 
 	h.ID = aux.ID
 	h.Name = aux.Name
-	h.Characters = &characterStore{
-		mx:         &sync.Mutex{},
-		characters: aux.Characters,
+	h.Tavern = game.NewTavern()
+	for _, character := range aux.Characters {
+		h.Tavern.AddCharacter(&character)
 	}
 
 	return nil
@@ -146,7 +132,7 @@ func (h *AccountActor) ProcessTick(ctx context.Context) {
 	ctxLogger := slog.With("span_id", spanID)
 	ctxLogger.Debug("Processing tick in account actor", "actor_id", h.GetID())
 
-	h.Characters.processTick(ctx)
+	h.Tavern.ProcessTick(ctx)
 }
 
 func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
@@ -165,13 +151,6 @@ func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
 	}
 
 	ctxLogger.Debug("Finished replaying ticks in account actor", "actor_id", h.GetID(), "ticks_replayed", ticksSinceTime)
-}
-
-func newCharacterStore() *characterStore {
-	return &characterStore{
-		mx:         &sync.Mutex{},
-		characters: make(map[uuid.UUID]game.Character),
-	}
 }
 
 func accountActorFactory(ctx context.Context) system.Actor {
@@ -194,8 +173,8 @@ func accountActorFactory(ctx context.Context) system.Actor {
 	}
 
 	return &AccountActor{
-		ID:         accountParams.ID,
-		Name:       accountParams.Name,
-		Characters: newCharacterStore(),
+		ID:     accountParams.ID,
+		Name:   accountParams.Name,
+		Tavern: nil,
 	}
 }
