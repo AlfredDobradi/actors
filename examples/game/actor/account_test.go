@@ -1,6 +1,7 @@
 package actor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
@@ -218,4 +219,58 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 	var unmarshaledAccount AccountActor
 	err = json.Unmarshal(raw, &unmarshaledAccount)
 	require.NoError(t, err)
+}
+
+func TestAccountUnmarshalJSON(t *testing.T) {
+	account := &AccountActor{
+		ID:     uuid.New(),
+		Name:   "TestAccount",
+		Tavern: game.NewTavern(),
+	}
+
+	inventory := game.NewInventory()
+	inventory.AddResource(game.Wood, 10)
+
+	character := &game.Character{
+		ID:         uuid.New(),
+		Name:       "TestCharacter",
+		Level:      5,
+		Experience: 1500,
+		Status:     game.StatusBusy,
+		Cooldown:   2,
+		Action: &game.GatherAction{
+			Resource: game.Wood,
+		},
+		Inventory: inventory,
+	}
+
+	account.Tavern.AddCharacter(character)
+
+	buf := bytes.NewBufferString("")
+	encoder := json.NewEncoder(buf)
+	encoder.SetIndent("", "  ")
+
+	err := encoder.Encode(account)
+	require.NoError(t, err)
+
+	var unmarshaledAccount AccountActor
+	err = json.Unmarshal(buf.Bytes(), &unmarshaledAccount)
+	require.NoError(t, err)
+
+	require.Equal(t, account.ID, unmarshaledAccount.ID)
+	require.Equal(t, account.Name, unmarshaledAccount.Name)
+
+	char, exists := unmarshaledAccount.Tavern.GetCharacter(character.ID)
+	require.True(t, exists)
+	require.Equal(t, character.Name, char.Name)
+	require.Equal(t, character.Level, char.Level)
+	require.Equal(t, character.Experience, char.Experience)
+	require.Equal(t, character.Status, char.Status)
+	require.Equal(t, character.Cooldown, char.Cooldown)
+	require.NotNil(t, char.Action)
+	require.IsType(t, &game.GatherAction{}, char.Action)
+	gatherAction := char.Action.(*game.GatherAction)
+	require.Equal(t, game.Wood, gatherAction.Resource)
+	require.NotNil(t, char.Inventory)
+	require.Equal(t, 10, char.Inventory.GetResource(game.Wood))
 }

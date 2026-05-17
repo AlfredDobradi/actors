@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/google/uuid"
@@ -18,6 +19,45 @@ func NewTavern() *Tavern {
 		mx:         &sync.Mutex{},
 		characters: make(map[uuid.UUID]*Character),
 	}
+}
+
+func (t *Tavern) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Characters map[uuid.UUID]Character `json:"characters"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	if t.mx == nil {
+		t.mx = &sync.Mutex{}
+	}
+
+	t.mx.Lock()
+	defer t.mx.Unlock()
+
+	t.characters = make(map[uuid.UUID]*Character)
+	for id, character := range aux.Characters {
+		t.characters[id] = &character
+	}
+	return nil
+}
+
+func (t *Tavern) MarshalJSON() ([]byte, error) {
+	t.mx.Lock()
+	defer t.mx.Unlock()
+
+	characters := make(map[uuid.UUID]Character)
+	for id, character := range t.characters {
+		characters[id] = *character
+	}
+
+	aux := struct {
+		Characters map[uuid.UUID]Character `json:"characters"`
+	}{
+		Characters: characters,
+	}
+	return json.Marshal(aux)
 }
 
 func (t *Tavern) AddCharacter(character *Character) {

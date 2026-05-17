@@ -57,28 +57,6 @@ func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) s
 	return nil
 }
 
-func (h *AccountActor) UnmarshalJSON(data []byte) error {
-	var aux struct {
-		ID         uuid.UUID                    `json:"id"`
-		Name       string                       `json:"name"`
-		Characters map[uuid.UUID]game.Character `json:"characters"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	h.ID = aux.ID
-	h.Name = aux.Name
-
-	// TODO add an UnmarshalJSON method to Tavern
-	h.Tavern = game.NewTavern()
-	for _, character := range aux.Characters {
-		h.Tavern.AddCharacter(&character)
-	}
-
-	return nil
-}
-
 func (h *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
 	mapAccount := map[string]any{
 		"id":         h.ID,
