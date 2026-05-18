@@ -49,7 +49,10 @@ func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) s
 func (h *AccountActor) routeMessage(msg *system.Message) routeHandler {
 	switch msg.GetBody().(type) {
 	case Tick:
-		return h.ProcessTick
+		return h.processTick
+	case model.NewGuildRequest:
+		// return h.createGuild
+		return nil
 	default:
 		return nil
 	}
@@ -95,7 +98,7 @@ func (h *AccountActor) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (h *AccountActor) ProcessTick(ctx context.Context, _ *system.Message) system.HandleError {
+func (h *AccountActor) processTick(ctx context.Context, _ *system.Message) system.HandleError {
 	spanID := telemetry.SpanIDFromContext(ctx)
 
 	ctxLogger := slog.With("span_id", spanID)
@@ -117,7 +120,7 @@ func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
 	ctxLogger.Debug("Replaying ticks in account actor", "actor_id", h.GetID(), "since", sinceTime.Format(time.RFC3339), "ticks", ticksSinceTime)
 
 	for i := 0; i < ticksSinceTime; i++ {
-		h.ProcessTick(ctx, &system.Message{})
+		h.processTick(ctx, &system.Message{})
 	}
 
 	ctxLogger.Debug("Finished replaying ticks in account actor", "actor_id", h.GetID(), "ticks_replayed", ticksSinceTime)
