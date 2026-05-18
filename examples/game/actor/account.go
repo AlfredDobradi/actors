@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
@@ -21,6 +22,7 @@ type AccountActor struct {
 	ID     uuid.UUID
 	Name   string
 	Tavern *game.Tavern
+	Gold   *atomic.Uint64
 }
 
 func (h *AccountActor) GetID() uuid.UUID {
@@ -58,12 +60,7 @@ func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) s
 }
 
 func (h *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
-	mapAccount := map[string]any{
-		"id":         h.ID,
-		"name":       h.Name,
-		"characters": h.Tavern.Characters(),
-	}
-	raw, err := json.Marshal(mapAccount)
+	raw, err := json.Marshal(h)
 	if err != nil {
 		return database.Snapshot{}, err
 	}
@@ -76,20 +73,18 @@ func (h *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 		return fmt.Errorf("no snapshot data provided for restoration")
 	}
 
-	var aux struct {
-		ID         uuid.UUID                    `json:"id"`
-		Name       string                       `json:"name"`
-		Characters map[uuid.UUID]game.Character `json:"characters"`
-	}
+	var aux AccountActor
 	if err := json.Unmarshal(snapshot.Data, &aux); err != nil {
 		return err
 	}
 
 	h.ID = aux.ID
 	h.Name = aux.Name
-	h.Tavern = game.NewTavern()
-	for _, character := range aux.Characters {
-		h.Tavern.AddCharacter(&character)
+	h.Tavern = aux.Tavern
+	if aux.Gold == nil {
+		h.Gold = &atomic.Uint64{}
+	} else {
+		h.Gold = aux.Gold
 	}
 
 	return nil
@@ -150,9 +145,57 @@ func accountActorFactory(ctx context.Context) system.Actor {
 		}
 	}
 
-	return &AccountActor{
+	if accountParams.ID == uuid.Nil {
+		accountParams.ID = uuid.New()
+	}
+
+	startingMoney := &atomic.Uint64{}
+	startingMoney.Store(3000)
+
+	a := &AccountActor{
 		ID:     accountParams.ID,
 		Name:   accountParams.Name,
 		Tavern: nil,
+		Gold:   startingMoney,
 	}
+
+	return a
+}
+
+func (a *AccountActor) MarshalJSON() ([]byte, error) {
+	gold := uint64(0)
+	if a.Gold != nil {
+		gold = a.Gold.Load()
+	}
+
+	raw := map[string]any{
+		"id":         a.ID,
+		"name":       a.Name,
+		"characters": a.Tavern.Characters(),
+		"gold":       gold,
+	}
+	return json.Marshal(raw)
+}
+
+func (a *AccountActor) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		ID         uuid.UUID                    `json:"id"`
+		Name       string                       `json:"name"`
+		Characters map[uuid.UUID]game.Character `json:"characters"`
+		Gold       uint64                       `json:"gold"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	a.ID = aux.ID
+	a.Name = aux.Name
+	a.Tavern = game.NewTavern()
+	for _, character := range aux.Characters {
+		a.Tavern.AddCharacter(&character)
+	}
+	a.Gold = &atomic.Uint64{}
+	a.Gold.Store(aux.Gold)
+
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -147,6 +148,9 @@ func TestActorPersistence(t *testing.T) {
 	require.Equal(t, "PersistentAccount", restoredAccount.Name)
 	require.NotNil(t, restoredAccount.Tavern)
 
+	gold := restoredAccount.Gold.Load()
+	require.Equal(t, uint64(3000), gold)
+
 	char, exists := restoredAccount.Tavern.GetCharacter(character.ID)
 	require.True(t, exists)
 	require.Equal(t, 1000, char.Experience)
@@ -193,10 +197,14 @@ func TestReplayTicks(t *testing.T) {
 }
 
 func TestAccountJSONRoundTrip(t *testing.T) {
+	gold := &atomic.Uint64{}
+	gold.Store(1000)
+
 	account := &AccountActor{
 		ID:     uuid.New(),
 		Name:   "TestAccount",
 		Tavern: game.NewTavern(),
+		Gold:   gold,
 	}
 
 	character := &game.Character{
@@ -219,6 +227,26 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 	var unmarshaledAccount AccountActor
 	err = json.Unmarshal(raw, &unmarshaledAccount)
 	require.NoError(t, err)
+
+	require.Equal(t, account.ID, unmarshaledAccount.ID)
+	require.Equal(t, account.Name, unmarshaledAccount.Name)
+	require.NotNil(t, unmarshaledAccount.Tavern)
+
+	char, exists := unmarshaledAccount.Tavern.GetCharacter(character.ID)
+	require.True(t, exists)
+	require.Equal(t, character.Name, char.Name)
+	require.Equal(t, character.Level, char.Level)
+	require.Equal(t, character.Experience, char.Experience)
+	require.Equal(t, character.Status, char.Status)
+	require.Equal(t, character.Cooldown, char.Cooldown)
+	require.NotNil(t, char.Action)
+	require.IsType(t, &game.GatherAction{}, char.Action)
+	gatherAction := char.Action.(*game.GatherAction)
+	require.Equal(t, game.Wood, gatherAction.Resource)
+
+	// Gold should be preserved through JSON round trip
+	goldValue := unmarshaledAccount.Gold.Load()
+	require.Equal(t, uint64(1000), goldValue)
 }
 
 func TestAccountUnmarshalJSON(t *testing.T) {
