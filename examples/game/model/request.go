@@ -24,3 +24,5 @@ type StartActionRequest struct {
 type StopActionRequest struct {
 	CharacterID string `json:"character_id"`
 }
+
+type NewGuildRequest struct{}
