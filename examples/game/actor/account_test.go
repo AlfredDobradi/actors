@@ -188,7 +188,7 @@ func TestReplayTicks(t *testing.T) {
 	require.Equal(t, 0, character.Experience)
 	require.Equal(t, 0, character.Inventory.GetResource(resource))
 
-	actor.ReplayTicks(ctx, since)
+	actor.replayTicks(ctx, since)
 	character, exists := actor.Tavern.GetCharacter(character.ID)
 	require.True(t, exists)
 
@@ -301,4 +301,33 @@ func TestAccountUnmarshalJSON(t *testing.T) {
 	require.Equal(t, game.Wood, gatherAction.Resource)
 	require.NotNil(t, char.Inventory)
 	require.Equal(t, 10, char.Inventory.GetResource(game.Wood))
+}
+
+func TestAccountCreateTavern(t *testing.T) {
+	account := &AccountActor{
+		ID:     uuid.New(),
+		Name:   "TestAccount",
+		Tavern: nil,
+	}
+
+	require.Nil(t, account.Tavern)
+	ctx := context.Background()
+
+	createMessage := &system.Message{
+		ID:        uuid.New(),
+		Sender:    uuid.Nil,
+		Payload:   model.NewTavernRequest{},
+		Recipient: system.Recipient{Kind: system.RecipientKindActor, Subject: account.ID.String()},
+	}
+
+	account.createTavern(ctx, createMessage)
+	require.NotNil(t, account.Tavern)
+
+	account.Tavern.AddCharacter(&game.Character{
+		ID: uuid.New(),
+	})
+
+	// Creating tavern again should not overwrite existing tavern
+	account.createTavern(ctx, createMessage)
+	require.NotNil(t, account.Tavern)
 }

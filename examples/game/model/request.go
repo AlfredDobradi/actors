@@ -25,4 +25,9 @@ type StopActionRequest struct {
 	CharacterID string `json:"character_id"`
 }
 
-type NewGuildRequest struct{}
+type NewTavernRequest struct{}
+
+type NewTavernResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}

@@ -48,6 +48,10 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	router.HandleFunc("/auth/session", s.handleCreateSession).Methods(http.MethodPost)
 	router.HandleFunc("/auth/session", s.handleDeleteSession).Methods(http.MethodDelete)
 
+	a := router.PathPrefix("/account").Subrouter()
+	a.Use(middleware.Authorization(db))
+	a.HandleFunc("/tavern", s.handleCreateTavern).Methods(http.MethodPost)
+
 	c := router.PathPrefix("/character").Subrouter()
 	c.Use(middleware.Authorization(db))
 	c.HandleFunc("/", s.handleGetCharacter).Methods(http.MethodPost)

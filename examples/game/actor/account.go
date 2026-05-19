@@ -50,9 +50,8 @@ func (h *AccountActor) routeMessage(msg *system.Message) routeHandler {
 	switch msg.GetBody().(type) {
 	case Tick:
 		return h.processTick
-	case model.NewGuildRequest:
-		// return h.createGuild
-		return nil
+	case model.NewTavernRequest:
+		return h.createTavern
 	default:
 		return nil
 	}
@@ -108,7 +107,7 @@ func (h *AccountActor) processTick(ctx context.Context, _ *system.Message) syste
 	return nil
 }
 
-func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
+func (h *AccountActor) replayTicks(ctx context.Context, since int64) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 
 	ctxLogger := slog.With("span_id", spanID)
@@ -124,6 +123,24 @@ func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
 	}
 
 	ctxLogger.Debug("Finished replaying ticks in account actor", "actor_id", h.GetID(), "ticks_replayed", ticksSinceTime)
+}
+
+func (h *AccountActor) createTavern(ctx context.Context, msg *system.Message) system.HandleError {
+	// tavern creation logic would go here, but for this example we'll just log the request and return an error since taverns aren't implemented
+	slog.Info("Received request to create tavern", "actor_id", h.GetID(), "message_id", msg.GetID())
+
+	if h.Tavern != nil {
+		return ErrTavernExists{}
+	}
+
+	h.Tavern = game.NewTavern()
+
+	if err := msg.Respond(h.ID, model.NewTavernResponse{OK: true}); err != nil {
+		slog.Error("Failed to send tavern creation response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
 }
 
 func accountActorFactory(ctx context.Context) system.Actor {

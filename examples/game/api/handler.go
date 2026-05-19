@@ -212,3 +212,25 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Session deleted successfully"))
 }
+
+func (s *Server) handleCreateTavern(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	accountData, ok := r.Context().Value(model.ContextKeyAccountData).(*model.Account)
+	if !ok || accountData == nil {
+		http.Error(w, "Failed to retrieve account data from context", http.StatusInternalServerError)
+		return
+	}
+
+	message := model.NewTavernRequest{}
+	resp, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, message)
+	if err != nil {
+		http.Error(w, "Failed to request tavern creation", http.StatusInternalServerError)
+		return
+	}
+
+	spew.Dump(resp)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Tavern creation requested successfully"))
+}

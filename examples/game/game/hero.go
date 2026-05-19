@@ -16,7 +16,8 @@ type Tavern struct {
 
 func NewTavern() *Tavern {
 	return &Tavern{
-		mx:         &sync.Mutex{},
+		mx: &sync.Mutex{},
+
 		characters: make(map[uuid.UUID]*Character),
 	}
 }
