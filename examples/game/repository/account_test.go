@@ -12,8 +12,7 @@ import (
 )
 
 func TestCreateAccount(t *testing.T) {
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 
 	req := model.CreateAccountRequest{
 		Username: "testuser",
@@ -33,8 +32,7 @@ func TestCreateAccount(t *testing.T) {
 }
 
 func TestValidateCredentials(t *testing.T) {
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 
 	// Create a test account
 	account := model.Account{
@@ -48,7 +46,7 @@ func TestValidateCredentials(t *testing.T) {
 	}
 
 	// Store the test account in the database
-	err = db.Set(context.Background(), "account:"+account.ID.String(), account)
+	err := db.Set(context.Background(), "account:"+account.ID.String(), account)
 	require.NoError(t, err)
 
 	// Validate credentials

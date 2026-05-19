@@ -30,8 +30,7 @@ func TestNewAccountHasNoTavern(t *testing.T) {
 	ctx := context.Background()
 	registry := system.NewRegistry()
 	registry.RegisterFactory("AccountActor", accountActorFactory)
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
 	params := model.AccountActorParams{Name: "TestAccount"}
@@ -91,8 +90,7 @@ func TestAccountActorFactory(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory("AccountActor", accountActorFactory)
 
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
 	for _, tt := range tests {
@@ -114,8 +112,7 @@ func TestActorPersistence(t *testing.T) {
 	ctx := context.Background()
 	registry := system.NewRegistry()
 	registry.RegisterFactory("AccountActor", accountActorFactory)
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 	params := model.AccountActorParams{Name: "PersistentAccount"}
 	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)

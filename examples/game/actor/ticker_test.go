@@ -258,8 +258,7 @@ func TestTickerActorFactory(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory("TickerActor", tickerActorFactory)
 
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 
 	mockSendFunc := func(
 		ctx context.Context,
@@ -294,8 +293,7 @@ func TestTickerActorFactoryInitialization(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory("TickerActor", tickerActorFactory)
 
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 
 	mockSendFunc := func(
 		ctx context.Context,
