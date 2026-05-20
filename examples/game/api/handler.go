@@ -304,3 +304,29 @@ func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (s *Server) handleGetCharacters(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	accountData, ok := r.Context().Value(model.ContextKeyAccountData).(*model.Account)
+	if !ok || accountData == nil {
+		http.Error(w, "Failed to retrieve account data from context", http.StatusInternalServerError)
+		return
+	}
+
+	req := model.GetCharactersRequest{}
+
+	characterData, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, req)
+	if err != nil {
+		http.Error(w, "Failed to request character", http.StatusInternalServerError)
+		return
+	}
+
+	data, ok := characterData.(model.GetCharactersResponse)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, "Failed to encode character details", http.StatusInternalServerError)
+		return
+	}
+}

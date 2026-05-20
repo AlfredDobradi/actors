@@ -53,6 +53,8 @@ func (h *AccountActor) routeMessage(msg *system.Message) routeHandler {
 		return h.processTick
 	case model.NewTavernRequest:
 		return h.createTavern
+	case model.GetCharactersRequest:
+		return h.getCharacters
 	case model.GetCharacterRequest:
 		return h.getCharacter
 	case model.HireCharacterRequest:
@@ -211,6 +213,38 @@ func (h *AccountActor) getCharacter(ctx context.Context, msg *system.Message) sy
 
 	if err := msg.Respond(h.ID, response); err != nil {
 		slog.Error("Failed to send get character response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
+}
+
+func (h *AccountActor) getCharacters(ctx context.Context, msg *system.Message) system.HandleError {
+	if h.Tavern == nil {
+		return NewAccountError(fmt.Errorf("tavern not found for account"))
+	}
+
+	slog.Info("Received request to get characters", "actor_id", h.GetID(), "message_id", msg.GetID())
+
+	characters := h.Tavern.Characters()
+	if len(characters) == 0 {
+		return NewAccountError(fmt.Errorf("no characters found"))
+	}
+
+	slog.Info("Found characters", "actor_id", h.GetID(), "character_count", len(characters))
+
+	details := make([]model.CharacterDetails, 0, len(characters))
+	for _, character := range characters {
+		details = append(details, model.DetailsFromCharacter(character))
+	}
+
+	response := model.GetCharactersResponse{
+		Status:  "OK",
+		Details: details,
+	}
+
+	if err := msg.Respond(h.ID, response); err != nil {
+		slog.Error("Failed to send get characters response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
 		return NewErrResponseFailed(err)
 	}
 

@@ -8,10 +8,18 @@ type GetCharacterRequest struct {
 	ID string `json:"id"`
 }
 
+type GetCharactersRequest struct{}
+
 type GetCharacterResponse struct {
 	Status  string           `json:"status"`
 	Details CharacterDetails `json:"details,omitempty"`
 	Error   string           `json:"error,omitempty"`
+}
+
+type GetCharactersResponse struct {
+	Status  string             `json:"status"`
+	Details []CharacterDetails `json:"details,omitempty"`
+	Error   string             `json:"error,omitempty"`
 }
 
 type StartActionRequest struct {

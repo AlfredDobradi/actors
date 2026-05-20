@@ -187,6 +187,29 @@ func getCharacter(t *testing.T, address, token, id string) (response, error) {
 	}, err
 }
 
+func getCharacters(t *testing.T, address, token string) (response, error) {
+	req, err := http.NewRequest(
+		http.MethodGet,
+		url(address, "/account/tavern/characters"),
+		nil,
+	)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(resp.Body)
+	require.NoError(t, err)
+
+	return response{
+		StatusCode: resp.StatusCode,
+		Body:       buf,
+	}, err
+}
+
 func TestApiIndex(t *testing.T) {
 	address, stop := startSuite()
 	defer close(stop)
@@ -312,4 +335,21 @@ func TestGetCharacter(t *testing.T) {
 	require.Equal(t, hireResp.CharacterName, charResp.Details.Name)
 	require.Equal(t, 1, charResp.Details.Level)
 	require.Equal(t, 0, charResp.Details.Experience)
+
+	multiResp, err := getCharacters(t, address, sessionResp.Token)
+	require.NoError(t, err)
+
+	var multiCharResp struct {
+		Status  string                   `json:"status"`
+		Details []model.CharacterDetails `json:"details,omitempty"`
+		Error   string                   `json:"error,omitempty"`
+	}
+	err = json.Unmarshal(multiResp.Body.Bytes(), &multiCharResp)
+	require.NoError(t, err)
+	require.Equal(t, "OK", multiCharResp.Status)
+	require.Len(t, multiCharResp.Details, 1)
+	require.Equal(t, hireResp.CharacterID, multiCharResp.Details[0].ID.String())
+	require.Equal(t, hireResp.CharacterName, multiCharResp.Details[0].Name)
+	require.Equal(t, 1, multiCharResp.Details[0].Level)
+	require.Equal(t, 0, multiCharResp.Details[0].Experience)
 }
