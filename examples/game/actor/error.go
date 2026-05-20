@@ -55,3 +55,19 @@ func (e ErrResponseFailed) Error() string {
 func NewErrResponseFailed(err error) ErrResponseFailed {
 	return ErrResponseFailed{Err: err}
 }
+
+type AccountError struct {
+	Err error
+}
+
+func (e AccountError) IsRecoverable() bool {
+	return false
+}
+
+func (e AccountError) Error() string {
+	return fmt.Sprintf("account error: %v", e.Err)
+}
+
+func NewAccountError(err error) AccountError {
+	return AccountError{Err: err}
+}

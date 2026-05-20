@@ -21,12 +21,17 @@ type Action interface {
 	GetName() string
 	Execute(ctx context.Context, character *Character)
 	GetCooldown() int
+	String() string
 }
 
 type FightAction struct{}
 
 func (f *FightAction) GetName() string {
 	return "fight"
+}
+
+func (f *FightAction) String() string {
+	return "is fighting"
 }
 
 func (f *FightAction) Execute(ctx context.Context, character *Character) {
@@ -51,6 +56,10 @@ func (f *FightAction) GetCooldown() int {
 
 func (g *GatherAction) GetName() string {
 	return "gather"
+}
+
+func (g *GatherAction) String() string {
+	return "is gathering " + g.Resource.Name
 }
 
 type GatherAction struct {

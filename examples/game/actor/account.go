@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -52,6 +53,10 @@ func (h *AccountActor) routeMessage(msg *system.Message) routeHandler {
 		return h.processTick
 	case model.NewTavernRequest:
 		return h.createTavern
+	case model.GetCharacterRequest:
+		return h.getCharacter
+	case model.HireCharacterRequest:
+		return h.hireCharacter
 	default:
 		return nil
 	}
@@ -137,6 +142,75 @@ func (h *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 
 	if err := msg.Respond(h.ID, model.NewTavernResponse{OK: true}); err != nil {
 		slog.Error("Failed to send tavern creation response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
+}
+
+// TODO check and remove gold
+func (h *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) system.HandleError {
+	if h.Tavern == nil {
+		return NewAccountError(fmt.Errorf("tavern not found for account"))
+	}
+
+	slog.Info("Received request to hire character", "actor_id", h.GetID(), "message_id", msg.GetID())
+
+	firstNames := []string{"Arin", "Bel", "Cal", "Dain", "Eli"}
+	lastNames := []string{"Strong", "Swift", "Brave", "Clever", "Bold"}
+
+	name := fmt.Sprintf("%s %s", firstNames[rand.Intn(len(firstNames))], lastNames[rand.Intn(len(lastNames))])
+	character := game.NewCharacter(name)
+
+	h.Tavern.AddCharacter(&character)
+
+	slog.Info("Hired new character", "actor_id", h.GetID(), "character_id", character.ID, "character_name", character.Name)
+
+	response := model.HireCharacterResponse{
+		OK:            true,
+		CharacterID:   character.ID.String(),
+		CharacterName: character.Name,
+	}
+
+	if err := msg.Respond(h.ID, response); err != nil {
+		slog.Error("Failed to send hire character response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
+}
+
+func (h *AccountActor) getCharacter(ctx context.Context, msg *system.Message) system.HandleError {
+	if h.Tavern == nil {
+		return NewAccountError(fmt.Errorf("tavern not found for account"))
+	}
+
+	request, ok := msg.GetBody().(model.GetCharacterRequest)
+	if !ok {
+		return NewErrInvalidMessage(fmt.Sprintf("%T", msg.GetBody()))
+	}
+
+	id, err := uuid.Parse(request.ID)
+	if err != nil {
+		return NewAccountError(err)
+	}
+
+	slog.Info("Received request to get character", "actor_id", h.GetID(), "message_id", msg.GetID(), "character_id", id)
+
+	character, exists := h.Tavern.GetCharacter(id)
+	if !exists {
+		return NewAccountError(fmt.Errorf("character with ID %s not found", id))
+	}
+
+	slog.Info("Found character", "actor_id", h.GetID(), "character_id", character.ID, "character_name", character.Name)
+
+	response := model.GetCharacterResponse{
+		Status:  "OK",
+		Details: model.DetailsFromCharacter(character),
+	}
+
+	if err := msg.Respond(h.ID, response); err != nil {
+		slog.Error("Failed to send get character response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
 		return NewErrResponseFailed(err)
 	}
 

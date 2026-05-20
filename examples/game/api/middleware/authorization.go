@@ -33,7 +33,7 @@ func Authorization(db database.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), model.ContextKeyAccountData, accountData)
+			ctx := context.WithValue(r.Context(), model.ContextKeyAccountData, &accountData)
 			ctx = context.WithValue(ctx, model.ContextKeySessionID, sessionID)
 			r = r.WithContext(ctx)
 

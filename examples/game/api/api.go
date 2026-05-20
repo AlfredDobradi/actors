@@ -51,6 +51,9 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	a := router.PathPrefix("/account").Subrouter()
 	a.Use(middleware.Authorization(db))
 	a.HandleFunc("/tavern", s.handleCreateTavern).Methods(http.MethodPost)
+	a.HandleFunc("/tavern/characters", s.notImplementedHandler).Methods(http.MethodGet)
+	a.HandleFunc("/tavern/characters/hire", s.handleHireCharacter).Methods(http.MethodPost)
+	a.HandleFunc("/tavern/characters/{characterId}", s.handleGetCharacter).Methods(http.MethodGet)
 
 	c := router.PathPrefix("/character").Subrouter()
 	c.Use(middleware.Authorization(db))

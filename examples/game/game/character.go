@@ -207,6 +207,7 @@ func (c *Character) ProcessTick(ctx context.Context) {
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
 
 	if c.Action == nil {
+		// we'll add decision making here
 		return
 	}
 
