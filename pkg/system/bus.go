@@ -192,7 +192,7 @@ func (b *Bus) Request(ctx context.Context, sender uuid.UUID, recipient Recipient
 			ctxLogger.Debug("Received response to request", "sender", res.GetSender(), "recipient", res.GetRecipient().String(), "responseID", res.GetID(), "responseTo", res.GetResponseTo(), "payload", fmt.Sprintf("%v", res.GetBody()))
 			response = res.GetBody()
 		case <-c.Done():
-			ctxLogger.Warn("Request timed out", "sender", sender, "recipient", recipient.String())
+			ctxLogger.Warn("Request timed out", "sender", sender, "recipient", recipient.String(), "kind", fmt.Sprintf("%T", payload))
 		}
 		close(isDone)
 	}(deadlineCtx)

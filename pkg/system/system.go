@@ -135,6 +135,10 @@ func (h *ActorHandler) Persist(ctx context.Context, db Persister) error {
 		return fmt.Errorf("failed to create snapshot for actor %s: %w", h.GetID(), err)
 	}
 
+	if snapshot.Data == nil {
+		return nil
+	}
+
 	key := database.SnapshotKey(h.GetKind(), h.GetID())
 	if err := db.Persist(ctx, key, snapshot); err != nil {
 		return fmt.Errorf("failed to persist snapshot for actor %s: %w", h.GetID(), err)

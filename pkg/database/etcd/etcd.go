@@ -109,7 +109,8 @@ func (s *Store) Persist(ctx context.Context, key string, value database.Snapshot
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Persisting snapshot in database", "key", key, "timestamp", value.Timestamp)
 
-	_, err := s.Client.Put(ctx, key, value.String())
+	putCtx := context.Background()
+	_, err := s.Client.Put(putCtx, key, value.String())
 	return err
 }
 

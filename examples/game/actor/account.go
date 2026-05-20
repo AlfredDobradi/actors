@@ -294,11 +294,15 @@ func (a *AccountActor) MarshalJSON() ([]byte, error) {
 	}
 
 	raw := map[string]any{
-		"id":         a.ID,
-		"name":       a.Name,
-		"characters": a.Tavern.Characters(),
-		"gold":       gold,
+		"id":   a.ID,
+		"name": a.Name,
+		"gold": gold,
 	}
+
+	if a.Tavern != nil {
+		raw["characters"] = a.Tavern.Characters()
+	}
+
 	return json.Marshal(raw)
 }
 
