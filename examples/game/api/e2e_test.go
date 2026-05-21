@@ -122,7 +122,7 @@ func createTavern(t *testing.T, address, token string) (response, error) {
 	req, err := http.NewRequest(
 		http.MethodPost,
 		url(address, "/account/tavern"),
-		nil,
+		bytes.NewBufferString(`{"name":"Test Tavern"}`),
 	)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)

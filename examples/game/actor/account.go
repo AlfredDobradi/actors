@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,8 @@ import (
 type routeHandler func(ctx context.Context, msg *system.Message) system.HandleError
 
 type AccountActor struct {
+	mx *sync.Mutex
+
 	ID     uuid.UUID
 	Name   string
 	Tavern *game.Tavern
@@ -136,13 +139,27 @@ func (h *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 	// tavern creation logic would go here, but for this example we'll just log the request and return an error since taverns aren't implemented
 	slog.Info("Received request to create tavern", "actor_id", h.GetID(), "message_id", msg.GetID())
 
+	request, ok := msg.GetBody().(model.NewTavernRequest)
+	if !ok {
+		return NewErrInvalidMessage(fmt.Sprintf("%T", msg.GetBody()))
+	}
+
+	slog.Info("Creating tavern", "actor_id", h.GetID(), "message_id", msg.GetID(), "tavern_name", request.Name)
+
 	if h.Tavern != nil {
 		return ErrTavernExists{}
 	}
 
-	h.Tavern = game.NewTavern()
+	if request.Name == "" {
+		msg.Respond(h.ID, model.NewTavernResponse{OK: false, Error: "tavern name cannot be empty"}) //nolint:errcheck
+		return NewAccountError(fmt.Errorf("tavern name cannot be empty"))
+	}
 
-	if err := msg.Respond(h.ID, model.NewTavernResponse{OK: true}); err != nil {
+	h.mx.Lock()
+	h.Tavern = game.NewTavern(request.Name)
+	h.mx.Unlock()
+
+	if err := msg.Respond(h.ID, model.NewTavernResponse{Name: h.Tavern.Name(), OK: true}); err != nil {
 		slog.Error("Failed to send tavern creation response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
 		return NewErrResponseFailed(err)
 	}
@@ -153,6 +170,8 @@ func (h *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 // TODO check and remove gold
 func (h *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) system.HandleError {
 	if h.Tavern == nil {
+		msg.Respond(h.ID, model.HireCharacterResponse{OK: false, Error: "tavern not found for account"}) //nolint:errcheck
+
 		return NewAccountError(fmt.Errorf("tavern not found for account"))
 	}
 
@@ -278,6 +297,7 @@ func accountActorFactory(ctx context.Context) system.Actor {
 	startingMoney.Store(3000)
 
 	a := &AccountActor{
+		mx:     &sync.Mutex{},
 		ID:     accountParams.ID,
 		Name:   accountParams.Name,
 		Tavern: nil,
@@ -287,6 +307,7 @@ func accountActorFactory(ctx context.Context) system.Actor {
 	return a
 }
 
+// TODO do tavern marshal separately
 func (a *AccountActor) MarshalJSON() ([]byte, error) {
 	gold := uint64(0)
 	if a.Gold != nil {
@@ -294,13 +315,10 @@ func (a *AccountActor) MarshalJSON() ([]byte, error) {
 	}
 
 	raw := map[string]any{
-		"id":   a.ID,
-		"name": a.Name,
-		"gold": gold,
-	}
-
-	if a.Tavern != nil {
-		raw["characters"] = a.Tavern.Characters()
+		"id":     a.ID,
+		"name":   a.Name,
+		"gold":   gold,
+		"tavern": a.Tavern,
 	}
 
 	return json.Marshal(raw)
@@ -308,10 +326,10 @@ func (a *AccountActor) MarshalJSON() ([]byte, error) {
 
 func (a *AccountActor) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ID         uuid.UUID                    `json:"id"`
-		Name       string                       `json:"name"`
-		Characters map[uuid.UUID]game.Character `json:"characters"`
-		Gold       uint64                       `json:"gold"`
+		ID     uuid.UUID    `json:"id"`
+		Name   string       `json:"name"`
+		Gold   uint64       `json:"gold"`
+		Tavern *game.Tavern `json:"tavern"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -319,10 +337,8 @@ func (a *AccountActor) UnmarshalJSON(data []byte) error {
 
 	a.ID = aux.ID
 	a.Name = aux.Name
-	a.Tavern = game.NewTavern()
-	for _, character := range aux.Characters {
-		a.Tavern.AddCharacter(&character)
-	}
+	a.Tavern = aux.Tavern
+
 	a.Gold = &atomic.Uint64{}
 	a.Gold.Store(aux.Gold)
 

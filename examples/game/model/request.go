@@ -32,9 +32,12 @@ type StopActionRequest struct {
 	CharacterID string `json:"character_id"`
 }
 
-type NewTavernRequest struct{}
+type NewTavernRequest struct {
+	Name string `json:"name"`
+}
 
 type NewTavernResponse struct {
+	Name  string `json:"name,omitempty"`
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 }

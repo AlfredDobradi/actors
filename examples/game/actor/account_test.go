@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -132,7 +133,7 @@ func TestActorPersistence(t *testing.T) {
 	character.Cooldown = 3
 
 	actor := actorHandler.GetActor().(*AccountActor)
-	actor.Tavern = game.NewTavern()
+	actor.Tavern = game.NewTavern("PersistentTavern")
 	actor.Tavern.AddCharacter(character)
 
 	snapshot, err := actorHandler.GetActor().Snapshot(ctx)
@@ -167,7 +168,7 @@ func TestReplayTicks(t *testing.T) {
 	actor := &AccountActor{
 		ID:     uuid.New(),
 		Name:   "TestAccount",
-		Tavern: game.NewTavern(),
+		Tavern: game.NewTavern("TestTavern"),
 	}
 	character := &game.Character{
 		ID:   uuid.New(),
@@ -197,60 +198,98 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 	gold := &atomic.Uint64{}
 	gold.Store(1000)
 
-	account := &AccountActor{
-		ID:     uuid.New(),
-		Name:   "TestAccount",
-		Tavern: game.NewTavern(),
-		Gold:   gold,
-	}
-
-	character := &game.Character{
-		ID:         uuid.New(),
-		Name:       "TestCharacter",
+	testHero := &game.Character{
+		ID:   uuid.New(),
+		Name: "TestCharacter",
+		Action: &game.GatherAction{
+			Resource: game.Wood,
+		},
 		Level:      5,
 		Experience: 1500,
 		Status:     game.StatusBusy,
 		Cooldown:   2,
-		Action: &game.GatherAction{
-			Resource: game.Wood,
+	}
+
+	tests := []struct {
+		label         string
+		tavern        *game.Tavern
+		expectedChars map[uuid.UUID]*game.Character
+	}{
+		{
+			label: "Account with Tavern and Characters",
+			tavern: func() *game.Tavern {
+				t := game.NewTavern("TestTavern")
+				t.AddCharacter(testHero)
+				return t
+			}(),
+			expectedChars: map[uuid.UUID]*game.Character{
+				testHero.ID: testHero,
+			},
+		},
+		{
+			label:         "Account with Empty Tavern",
+			tavern:        game.NewTavern("EmptyTavern"),
+			expectedChars: map[uuid.UUID]*game.Character{},
+		},
+		{
+			label:  "Account with No Tavern",
+			tavern: nil,
 		},
 	}
 
-	account.Tavern.AddCharacter(character)
+	for _, tt := range tests {
+		tf := func(t *testing.T) {
+			account := &AccountActor{
+				ID:     uuid.New(),
+				Name:   "TestAccount",
+				Tavern: tt.tavern,
+				Gold:   gold,
+			}
 
-	raw, err := json.Marshal(account)
-	require.NoError(t, err)
+			raw, err := json.Marshal(account)
+			require.NoError(t, err)
 
-	var unmarshaledAccount AccountActor
-	err = json.Unmarshal(raw, &unmarshaledAccount)
-	require.NoError(t, err)
+			var unmarshaledAccount AccountActor
+			err = json.Unmarshal(raw, &unmarshaledAccount)
+			require.NoError(t, err)
 
-	require.Equal(t, account.ID, unmarshaledAccount.ID)
-	require.Equal(t, account.Name, unmarshaledAccount.Name)
-	require.NotNil(t, unmarshaledAccount.Tavern)
+			require.Equal(t, account.ID, unmarshaledAccount.ID)
+			require.Equal(t, account.Name, unmarshaledAccount.Name)
 
-	char, exists := unmarshaledAccount.Tavern.GetCharacter(character.ID)
-	require.True(t, exists)
-	require.Equal(t, character.Name, char.Name)
-	require.Equal(t, character.Level, char.Level)
-	require.Equal(t, character.Experience, char.Experience)
-	require.Equal(t, character.Status, char.Status)
-	require.Equal(t, character.Cooldown, char.Cooldown)
-	require.NotNil(t, char.Action)
-	require.IsType(t, &game.GatherAction{}, char.Action)
-	gatherAction := char.Action.(*game.GatherAction)
-	require.Equal(t, game.Wood, gatherAction.Resource)
+			if len(tt.expectedChars) > 0 {
+				char, exists := unmarshaledAccount.Tavern.GetCharacter(testHero.ID)
+				require.True(t, exists)
+				require.Equal(t, testHero.Name, char.Name)
+				require.Equal(t, testHero.Level, char.Level)
+				require.Equal(t, testHero.Experience, char.Experience)
+				require.Equal(t, testHero.Status, char.Status)
+				require.Equal(t, testHero.Cooldown, char.Cooldown)
+				require.NotNil(t, char.Action)
+				require.IsType(t, &game.GatherAction{}, char.Action)
+				gatherAction := char.Action.(*game.GatherAction)
+				require.Equal(t, game.Wood, gatherAction.Resource)
+			}
 
-	// Gold should be preserved through JSON round trip
-	goldValue := unmarshaledAccount.Gold.Load()
-	require.Equal(t, uint64(1000), goldValue)
+			// Gold should be preserved through JSON round trip
+			goldValue := unmarshaledAccount.Gold.Load()
+			require.Equal(t, uint64(1000), goldValue)
+
+			if tt.tavern != nil {
+				require.Equal(t, tt.tavern.Name(), unmarshaledAccount.Tavern.Name())
+				require.Equal(t, len(tt.expectedChars), len(unmarshaledAccount.Tavern.Characters()))
+			} else {
+				require.Nil(t, unmarshaledAccount.Tavern)
+			}
+		}
+		t.Run(tt.label, tf)
+	}
 }
 
 func TestAccountUnmarshalJSON(t *testing.T) {
 	account := &AccountActor{
 		ID:     uuid.New(),
 		Name:   "TestAccount",
-		Tavern: game.NewTavern(),
+		Tavern: game.NewTavern("TestTavern"),
 	}
 
 	inventory := game.NewInventory()
@@ -298,33 +337,54 @@ func TestAccountUnmarshalJSON(t *testing.T) {
 	require.Equal(t, game.Wood, gatherAction.Resource)
 	require.NotNil(t, char.Inventory)
 	require.Equal(t, 10, char.Inventory.GetResource(game.Wood))
+	require.Equal(t, account.Tavern.Name(), unmarshaledAccount.Tavern.Name())
 }
 
 func TestAccountCreateTavern(t *testing.T) {
-	account := &AccountActor{
-		ID:     uuid.New(),
-		Name:   "TestAccount",
-		Tavern: nil,
+	tests := []struct {
+		label       string
+		tavernName  string
+		expectError bool
+	}{
+		{
+			label:       "Valid Tavern Name",
+			tavernName:  "MyTavern",
+			expectError: false,
+		},
+		{
+			label:       "Empty Tavern Name",
+			tavernName:  "",
+			expectError: true,
+		},
 	}
 
-	require.Nil(t, account.Tavern)
-	ctx := context.Background()
+	for _, tt := range tests {
+		tf := func(t *testing.T) {
+			account := &AccountActor{
+				mx:     &sync.Mutex{},
+				ID:     uuid.New(),
+				Name:   "TestAccount",
+				Tavern: nil,
+			}
 
-	createMessage := &system.Message{
-		ID:        uuid.New(),
-		Sender:    uuid.Nil,
-		Payload:   model.NewTavernRequest{},
-		Recipient: system.Recipient{Kind: system.RecipientKindActor, Subject: account.ID.String()},
+			ctx := context.Background()
+			createMessage := &system.Message{
+				ID:        uuid.New(),
+				Sender:    uuid.Nil,
+				Payload:   model.NewTavernRequest{Name: tt.tavernName},
+				Recipient: system.Recipient{Kind: system.RecipientKindActor, Subject: account.ID.String()},
+			}
+
+			err := account.createTavern(ctx, createMessage)
+			if tt.expectError {
+				require.Error(t, err)
+				require.Nil(t, account.Tavern)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, account.Tavern)
+				require.Equal(t, tt.tavernName, account.Tavern.Name())
+			}
+		}
+		t.Run(tt.label, tf)
 	}
-
-	account.createTavern(ctx, createMessage)
-	require.NotNil(t, account.Tavern)
-
-	account.Tavern.AddCharacter(&game.Character{
-		ID: uuid.New(),
-	})
-
-	// Creating tavern again should not overwrite existing tavern
-	account.createTavern(ctx, createMessage)
-	require.NotNil(t, account.Tavern)
 }

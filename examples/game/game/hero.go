@@ -11,19 +11,26 @@ import (
 type Tavern struct {
 	mx *sync.Mutex
 
+	name       string
 	characters map[uuid.UUID]*Character
 }
 
-func NewTavern() *Tavern {
+func NewTavern(name string) *Tavern {
 	return &Tavern{
 		mx: &sync.Mutex{},
 
+		name:       name,
 		characters: make(map[uuid.UUID]*Character),
 	}
 }
 
+func (t *Tavern) Name() string {
+	return t.name
+}
+
 func (t *Tavern) UnmarshalJSON(data []byte) error {
 	var aux struct {
+		Name       string                  `json:"name"`
 		Characters map[uuid.UUID]Character `json:"characters"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -41,6 +48,7 @@ func (t *Tavern) UnmarshalJSON(data []byte) error {
 	for id, character := range aux.Characters {
 		t.characters[id] = &character
 	}
+	t.name = aux.Name
 	return nil
 }
 
@@ -54,8 +62,10 @@ func (t *Tavern) MarshalJSON() ([]byte, error) {
 	}
 
 	aux := struct {
+		Name       string                  `json:"name"`
 		Characters map[uuid.UUID]Character `json:"characters"`
 	}{
+		Name:       t.name,
 		Characters: characters,
 	}
 	return json.Marshal(aux)

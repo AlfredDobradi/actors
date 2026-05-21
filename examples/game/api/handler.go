@@ -226,8 +226,14 @@ func (s *Server) handleCreateTavern(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message := model.NewTavernRequest{}
-	_, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, message)
+	httpReq := model.NewTavernRequest{}
+	if err := json.NewDecoder(r.Body).Decode(&httpReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	_, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, httpReq)
 	if err != nil {
 		http.Error(w, "Failed to request tavern creation", http.StatusInternalServerError)
 		return
