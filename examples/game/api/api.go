@@ -40,6 +40,7 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	}
 
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Warn("Received request for unknown route", "method", r.Method, "path", r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Not found"))
 	})
@@ -47,6 +48,13 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	router.HandleFunc("/auth/account", s.handleCreateAccount).Methods(http.MethodPost)
 	router.HandleFunc("/auth/session", s.handleCreateSession).Methods(http.MethodPost)
 	router.HandleFunc("/auth/session", s.handleDeleteSession).Methods(http.MethodDelete)
+
+	a := router.PathPrefix("/account").Subrouter()
+	a.Use(middleware.Authorization(db))
+	a.HandleFunc("/tavern", s.handleCreateTavern).Methods(http.MethodPost)
+	a.HandleFunc("/tavern/characters", s.handleGetCharacters).Methods(http.MethodGet)
+	a.HandleFunc("/tavern/characters/hire", s.handleHireCharacter).Methods(http.MethodPost)
+	a.HandleFunc("/tavern/characters/{characterId}", s.handleGetCharacter).Methods(http.MethodGet)
 
 	c := router.PathPrefix("/character").Subrouter()
 	c.Use(middleware.Authorization(db))

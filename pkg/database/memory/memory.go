@@ -16,12 +16,12 @@ type Store struct {
 	mu   sync.RWMutex
 }
 
-func NewStore() (*Store, error) {
+func NewStore() *Store {
 	s := &Store{
 		data: make(map[string]string),
 	}
 
-	return s, nil
+	return s
 }
 
 func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {

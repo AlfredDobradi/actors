@@ -17,8 +17,7 @@ func TestRegistrySpawn(t *testing.T) {
 		return &MockActor{id: uuid.New(), kind: "testActor"}
 	})
 
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
 	ctx := context.Background()

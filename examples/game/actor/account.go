@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/alfreddobradi/actors/examples/game/game"
@@ -18,25 +20,15 @@ import (
 	"github.com/google/uuid"
 )
 
-type characterStore struct {
-	mx         *sync.Mutex
-	characters map[uuid.UUID]game.Character
-}
-
-func (s *characterStore) processTick(ctx context.Context) {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
-	for id, character := range s.characters {
-		character.ProcessTick(ctx)
-		s.characters[id] = character
-	}
-}
+type routeHandler func(ctx context.Context, msg *system.Message) system.HandleError
 
 type AccountActor struct {
-	ID         uuid.UUID
-	Name       string
-	Characters *characterStore
+	mx *sync.Mutex
+
+	ID     uuid.UUID
+	Name   string
+	Tavern *game.Tavern
+	Gold   *atomic.Uint64
 }
 
 func (h *AccountActor) GetID() uuid.UUID {
@@ -48,58 +40,35 @@ func (h *AccountActor) GetKind() string {
 }
 
 func (h *AccountActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
-	switch payload := msg.GetBody().(type) {
-	case Tick:
-		h.ProcessTick(ctx)
-	case model.StartActionRequest:
-		// h.startAction(ctx, payload.CharacterID, payload.Action)
-	case model.StopActionRequest:
-		// h.stopAction(ctx, payload.CharacterID)
-	case model.CreateCharacterRequest:
-		// h.addCharacter(ctx, payload)
-	case model.GetCharacterRequest:
-		// character := h.getCharacter(ctx, payload)
-		// if character != nil {
-		// 	slog.Info("Character found", "actor_id", h.GetID(), "character_id", character.ID, "character_name", character.Name, "character_level", character.Level, "character_experience", character.Experience, "character_status", character.Status)
-		// 	if err := msg.Respond(h.GetID(), character); err != nil {
-		// 		slog.Warn("Failed to respond to request", "error", err)
-		// 	}
-		// } else {
-		// 	slog.Debug("Character not found", "actor_id", h.GetID(), "character_name", payload.Name)
-		// }
-	default:
-		slog.Warn("Received message with unknown payload type", "actor_id", h.GetID(), "message_id", msg.GetID(), "payload_type", fmt.Sprintf("%T", payload))
+	handler := h.routeMessage(msg)
+
+	if handler == nil {
+		slog.Warn("Received message with unknown payload type", "actor_id", h.GetID(), "message_id", msg.GetID(), "payload_type", fmt.Sprintf("%T", msg.GetBody()))
+		return NewErrInvalidMessage(fmt.Sprintf("%T", msg.GetBody()))
 	}
-	return nil
+
+	return handler(ctx, msg)
 }
 
-func (h *AccountActor) UnmarshalJSON(data []byte) error {
-	var aux struct {
-		ID         uuid.UUID                    `json:"id"`
-		Name       string                       `json:"name"`
-		Characters map[uuid.UUID]game.Character `json:"characters"`
+func (h *AccountActor) routeMessage(msg *system.Message) routeHandler {
+	switch msg.GetBody().(type) {
+	case Tick:
+		return h.processTick
+	case model.NewTavernRequest:
+		return h.createTavern
+	case model.GetCharactersRequest:
+		return h.getCharacters
+	case model.GetCharacterRequest:
+		return h.getCharacter
+	case model.HireCharacterRequest:
+		return h.hireCharacter
+	default:
+		return nil
 	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	h.ID = aux.ID
-	h.Name = aux.Name
-	h.Characters = &characterStore{
-		mx:         &sync.Mutex{},
-		characters: aux.Characters,
-	}
-
-	return nil
 }
 
 func (h *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
-	mapAccount := map[string]any{
-		"id":         h.ID,
-		"name":       h.Name,
-		"characters": h.Characters.characters,
-	}
-	raw, err := json.Marshal(mapAccount)
+	raw, err := json.Marshal(h)
 	if err != nil {
 		return database.Snapshot{}, err
 	}
@@ -112,20 +81,18 @@ func (h *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 		return fmt.Errorf("no snapshot data provided for restoration")
 	}
 
-	var aux struct {
-		ID         uuid.UUID                    `json:"id"`
-		Name       string                       `json:"name"`
-		Characters map[uuid.UUID]game.Character `json:"characters"`
-	}
+	var aux AccountActor
 	if err := json.Unmarshal(snapshot.Data, &aux); err != nil {
 		return err
 	}
 
 	h.ID = aux.ID
 	h.Name = aux.Name
-	h.Characters = &characterStore{
-		mx:         &sync.Mutex{},
-		characters: aux.Characters,
+	h.Tavern = aux.Tavern
+	if aux.Gold == nil {
+		h.Gold = &atomic.Uint64{}
+	} else {
+		h.Gold = aux.Gold
 	}
 
 	return nil
@@ -140,16 +107,17 @@ func (h *AccountActor) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (h *AccountActor) ProcessTick(ctx context.Context) {
+func (h *AccountActor) processTick(ctx context.Context, _ *system.Message) system.HandleError {
 	spanID := telemetry.SpanIDFromContext(ctx)
 
 	ctxLogger := slog.With("span_id", spanID)
 	ctxLogger.Debug("Processing tick in account actor", "actor_id", h.GetID())
 
-	h.Characters.processTick(ctx)
+	h.Tavern.ProcessTick(ctx)
+	return nil
 }
 
-func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
+func (h *AccountActor) replayTicks(ctx context.Context, since int64) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 
 	ctxLogger := slog.With("span_id", spanID)
@@ -161,17 +129,155 @@ func (h *AccountActor) ReplayTicks(ctx context.Context, since int64) {
 	ctxLogger.Debug("Replaying ticks in account actor", "actor_id", h.GetID(), "since", sinceTime.Format(time.RFC3339), "ticks", ticksSinceTime)
 
 	for i := 0; i < ticksSinceTime; i++ {
-		h.ProcessTick(ctx)
+		h.processTick(ctx, &system.Message{})
 	}
 
 	ctxLogger.Debug("Finished replaying ticks in account actor", "actor_id", h.GetID(), "ticks_replayed", ticksSinceTime)
 }
 
-func newCharacterStore() *characterStore {
-	return &characterStore{
-		mx:         &sync.Mutex{},
-		characters: make(map[uuid.UUID]game.Character),
+func (h *AccountActor) createTavern(ctx context.Context, msg *system.Message) system.HandleError {
+	// tavern creation logic would go here, but for this example we'll just log the request and return an error since taverns aren't implemented
+	slog.Info("Received request to create tavern", "actor_id", h.GetID(), "message_id", msg.GetID())
+
+	request, ok := msg.GetBody().(model.NewTavernRequest)
+	if !ok {
+		return NewErrInvalidMessage(fmt.Sprintf("%T", msg.GetBody()))
 	}
+
+	slog.Info("Creating tavern", "actor_id", h.GetID(), "message_id", msg.GetID(), "tavern_name", request.Name)
+
+	if h.Tavern != nil {
+		return ErrTavernExists{}
+	}
+
+	if request.Name == "" {
+		msg.Respond(h.ID, model.NewTavernResponse{OK: false, Error: "tavern name cannot be empty"}) //nolint:errcheck
+		return NewAccountError(fmt.Errorf("tavern name cannot be empty"))
+	}
+
+	h.mx.Lock()
+	h.Tavern = game.NewTavern(request.Name)
+	h.mx.Unlock()
+
+	if err := msg.Respond(h.ID, model.NewTavernResponse{Name: h.Tavern.Name(), OK: true}); err != nil {
+		slog.Error("Failed to send tavern creation response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
+}
+
+// TODO check and remove gold
+func (h *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) system.HandleError {
+	if h.Tavern == nil {
+		msg.Respond(h.ID, model.HireCharacterResponse{OK: false, Error: "tavern not found for account"}) //nolint:errcheck
+
+		return NewAccountError(fmt.Errorf("tavern not found for account"))
+	}
+
+	slog.Info("Received request to hire character", "actor_id", h.GetID(), "message_id", msg.GetID())
+
+	// check whether account has enough gold
+	cost := game.HeroPriceMultiplier(len(h.Tavern.Characters())) * 1000
+
+	if cost > h.Gold.Load() {
+		msg.Respond(h.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", h.Gold.Load(), cost)}) //nolint:errcheck
+		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %d, need %d", h.Gold.Load(), cost))
+	} else {
+		h.Gold.Add(^uint64(cost - 1))
+	}
+
+	firstNames := []string{"Arin", "Bel", "Cal", "Dain", "Eli"}
+	lastNames := []string{"Strong", "Swift", "Brave", "Clever", "Bold"}
+
+	name := fmt.Sprintf("%s %s", firstNames[rand.Intn(len(firstNames))], lastNames[rand.Intn(len(lastNames))])
+	character := game.NewCharacter(name)
+
+	h.Tavern.AddCharacter(&character)
+
+	slog.Info("Hired new character", "actor_id", h.GetID(), "character_id", character.ID, "character_name", character.Name)
+
+	response := model.HireCharacterResponse{
+		OK:            true,
+		CharacterID:   character.ID.String(),
+		CharacterName: character.Name,
+	}
+
+	if err := msg.Respond(h.ID, response); err != nil {
+		slog.Error("Failed to send hire character response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
+}
+
+func (h *AccountActor) getCharacter(ctx context.Context, msg *system.Message) system.HandleError {
+	if h.Tavern == nil {
+		return NewAccountError(fmt.Errorf("tavern not found for account"))
+	}
+
+	request, ok := msg.GetBody().(model.GetCharacterRequest)
+	if !ok {
+		return NewErrInvalidMessage(fmt.Sprintf("%T", msg.GetBody()))
+	}
+
+	id, err := uuid.Parse(request.ID)
+	if err != nil {
+		return NewAccountError(err)
+	}
+
+	slog.Info("Received request to get character", "actor_id", h.GetID(), "message_id", msg.GetID(), "character_id", id)
+
+	character, exists := h.Tavern.GetCharacter(id)
+	if !exists {
+		return NewAccountError(fmt.Errorf("character with ID %s not found", id))
+	}
+
+	slog.Info("Found character", "actor_id", h.GetID(), "character_id", character.ID, "character_name", character.Name)
+
+	response := model.GetCharacterResponse{
+		Status:  "OK",
+		Details: model.DetailsFromCharacter(character),
+	}
+
+	if err := msg.Respond(h.ID, response); err != nil {
+		slog.Error("Failed to send get character response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
+}
+
+func (h *AccountActor) getCharacters(ctx context.Context, msg *system.Message) system.HandleError {
+	if h.Tavern == nil {
+		return NewAccountError(fmt.Errorf("tavern not found for account"))
+	}
+
+	slog.Info("Received request to get characters", "actor_id", h.GetID(), "message_id", msg.GetID())
+
+	characters := h.Tavern.Characters()
+	if len(characters) == 0 {
+		return NewAccountError(fmt.Errorf("no characters found"))
+	}
+
+	slog.Info("Found characters", "actor_id", h.GetID(), "character_count", len(characters))
+
+	details := make([]model.CharacterDetails, 0, len(characters))
+	for _, character := range characters {
+		details = append(details, model.DetailsFromCharacter(character))
+	}
+
+	response := model.GetCharactersResponse{
+		Status:  "OK",
+		Details: details,
+	}
+
+	if err := msg.Respond(h.ID, response); err != nil {
+		slog.Error("Failed to send get characters response", "error", err, "actor_id", h.GetID(), "message_id", msg.GetID())
+		return NewErrResponseFailed(err)
+	}
+
+	return nil
 }
 
 func accountActorFactory(ctx context.Context) system.Actor {
@@ -193,9 +299,57 @@ func accountActorFactory(ctx context.Context) system.Actor {
 		}
 	}
 
-	return &AccountActor{
-		ID:         accountParams.ID,
-		Name:       accountParams.Name,
-		Characters: newCharacterStore(),
+	if accountParams.ID == uuid.Nil {
+		accountParams.ID = uuid.New()
 	}
+
+	startingMoney := &atomic.Uint64{}
+	startingMoney.Store(3000)
+
+	a := &AccountActor{
+		mx:     &sync.Mutex{},
+		ID:     accountParams.ID,
+		Name:   accountParams.Name,
+		Tavern: nil,
+		Gold:   startingMoney,
+	}
+
+	return a
+}
+
+func (a *AccountActor) MarshalJSON() ([]byte, error) {
+	gold := uint64(0)
+	if a.Gold != nil {
+		gold = a.Gold.Load()
+	}
+
+	raw := map[string]any{
+		"id":     a.ID,
+		"name":   a.Name,
+		"gold":   gold,
+		"tavern": a.Tavern,
+	}
+
+	return json.Marshal(raw)
+}
+
+func (a *AccountActor) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		ID     uuid.UUID    `json:"id"`
+		Name   string       `json:"name"`
+		Gold   uint64       `json:"gold"`
+		Tavern *game.Tavern `json:"tavern"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	a.ID = aux.ID
+	a.Name = aux.Name
+	a.Tavern = aux.Tavern
+
+	a.Gold = &atomic.Uint64{}
+	a.Gold.Store(aux.Gold)
+
+	return nil
 }

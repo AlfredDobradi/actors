@@ -30,11 +30,41 @@ type Inventory struct {
 	resources map[string]int
 }
 
-func NewInventory() Inventory {
-	return Inventory{
+func NewInventory() *Inventory {
+	return &Inventory{
 		mx:        &sync.Mutex{},
 		resources: make(map[string]int),
 	}
+}
+
+func (inv *Inventory) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Resources map[string]int `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	if inv.mx == nil {
+		inv.mx = &sync.Mutex{}
+	}
+
+	inv.mx.Lock()
+	defer inv.mx.Unlock()
+	inv.resources = aux.Resources
+	return nil
+}
+
+func (inv *Inventory) MarshalJSON() ([]byte, error) {
+	inv.mx.Lock()
+	defer inv.mx.Unlock()
+
+	aux := struct {
+		Resources map[string]int `json:"resources"`
+	}{
+		Resources: inv.resources,
+	}
+	return json.Marshal(aux)
 }
 
 func (inv *Inventory) AddResource(resource Resource, quantity int) {
@@ -60,11 +90,6 @@ func (inv *Inventory) GetResource(resource Resource) int {
 	return inv.resources[resource.Name]
 }
 
-type Tavern struct {
-	ID   uuid.UUID
-	Name string
-}
-
 type Character struct {
 	ID         uuid.UUID `json:"id"`
 	Name       string    `json:"name"`
@@ -74,7 +99,7 @@ type Character struct {
 	Cooldown   int       `json:"cooldown"`
 	Action     Action    `json:"-"`
 
-	Inventory Inventory `json:"inventory"`
+	Inventory *Inventory `json:"inventory"`
 }
 
 func (c Character) MarshalJSON() ([]byte, error) {
@@ -127,7 +152,7 @@ func (c *Character) UnmarshalJSON(data []byte) error {
 	c.Experience = aux.Experience
 	c.Status = aux.Status
 	c.Cooldown = aux.Cooldown
-	c.Inventory = aux.Inventory
+	c.Inventory = &aux.Inventory
 
 	if len(aux.Action) > 0 {
 		var actionMap map[string]interface{}
@@ -182,6 +207,7 @@ func (c *Character) ProcessTick(ctx context.Context) {
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
 
 	if c.Action == nil {
+		// we'll add decision making here
 		return
 	}
 

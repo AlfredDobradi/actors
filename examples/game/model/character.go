@@ -14,3 +14,28 @@ type StartActionMessage struct {
 type StopActionMessage struct {
 	CharacterID uuid.UUID `json:"character_id"`
 }
+
+type CharacterDetails struct {
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	Level      int       `json:"level"`
+	Experience int       `json:"experience"`
+	Progress   int       `json:"progress"`
+	Action     string    `json:"action"`
+}
+
+func DetailsFromCharacter(c *game.Character) CharacterDetails {
+	action := "is not currently doing anything"
+	if c.Action != nil {
+		action = c.Action.String()
+	}
+
+	return CharacterDetails{
+		ID:         c.ID,
+		Name:       c.Name,
+		Level:      c.Level,
+		Experience: c.Experience,
+		Progress:   c.Cooldown,
+		Action:     action,
+	}
+}

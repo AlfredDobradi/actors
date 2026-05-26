@@ -135,6 +135,10 @@ func (h *ActorHandler) Persist(ctx context.Context, db Persister) error {
 		return fmt.Errorf("failed to create snapshot for actor %s: %w", h.GetID(), err)
 	}
 
+	if snapshot.Data == nil {
+		return nil
+	}
+
 	key := database.SnapshotKey(h.GetKind(), h.GetID())
 	if err := db.Persist(ctx, key, snapshot); err != nil {
 		return fmt.Errorf("failed to persist snapshot for actor %s: %w", h.GetID(), err)
@@ -197,8 +201,13 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			// Handle incoming message
 			slog.Debug("Actor received message", "actor_id", h.actor.GetID(), "message_id", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))
 			handleError = h.actor.HandleMessage(ctx, msg)
-			if handleError != nil && !handleError.IsRecoverable() {
-				return
+			if handleError != nil {
+				if !handleError.IsRecoverable() {
+					slog.Error("Actor encountered unrecoverable error", "actor_id", h.actor.GetID(), "error", handleError)
+					return
+				}
+
+				slog.Warn("Actor encountered recoverable error", "actor_id", h.actor.GetID(), "error", handleError)
 			}
 		case <-persistTimer.C:
 			slog.Debug("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())

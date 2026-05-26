@@ -5,14 +5,21 @@ type CreateCharacterRequest struct {
 }
 
 type GetCharacterRequest struct {
-	Name string `json:"name"`
+	ID string `json:"id"`
 }
 
+type GetCharactersRequest struct{}
+
 type GetCharacterResponse struct {
-	Name       string         `json:"name"`
-	Level      int            `json:"level"`
-	Experience int            `json:"experience"`
-	Inventory  map[string]int `json:"inventory"`
+	Status  string           `json:"status"`
+	Details CharacterDetails `json:"details,omitempty"`
+	Error   string           `json:"error,omitempty"`
+}
+
+type GetCharactersResponse struct {
+	Status  string             `json:"status"`
+	Details []CharacterDetails `json:"details,omitempty"`
+	Error   string             `json:"error,omitempty"`
 }
 
 type StartActionRequest struct {
@@ -23,4 +30,27 @@ type StartActionRequest struct {
 
 type StopActionRequest struct {
 	CharacterID string `json:"character_id"`
+}
+
+type NewTavernRequest struct {
+	Name string `json:"name"`
+}
+
+type NewTavernResponse struct {
+	Name  string `json:"name,omitempty"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+type HireCharacterRequest struct{}
+
+type HireCharacterResponse struct {
+	CharacterID   string `json:"character_id,omitempty"`
+	CharacterName string `json:"character_name,omitempty"`
+	OK            bool   `json:"ok"`
+	Error         string `json:"error,omitempty"`
+}
+
+type RequestError struct {
+	Err error
 }

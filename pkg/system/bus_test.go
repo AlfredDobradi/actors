@@ -60,8 +60,7 @@ func TestRouting(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
-	db, err := memory.NewStore()
-	require.NoError(t, err)
+	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
 	handlerFoo, err := sys.Spawn(context.Background(), mockBusActorKind)

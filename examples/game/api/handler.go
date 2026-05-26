@@ -12,27 +12,12 @@ import (
 	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 )
 
-func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
-	span := telemetry.SpanFromRequest(r)
-	decoder := json.NewDecoder(r.Body)
-	var req model.GetCharacterRequest
-	if err := decoder.Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	characterData, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, req)
-	if err != nil {
-		http.Error(w, "Failed to request character", http.StatusInternalServerError)
-		return
-	}
-
-	spew.Fdump(w, characterData)
+func (s *Server) notImplementedHandler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
 func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
@@ -211,4 +196,124 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Session deleted successfully"))
+}
+
+func (s *Server) handleCreateTavern(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	accountData, ok := r.Context().Value(model.ContextKeyAccountData).(*model.Account)
+	if !ok || accountData == nil {
+		http.Error(w, "Failed to retrieve account data from context", http.StatusInternalServerError)
+		return
+	}
+
+	httpReq := model.NewTavernRequest{}
+	if err := json.NewDecoder(r.Body).Decode(&httpReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	_, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, httpReq)
+	if err != nil {
+		http.Error(w, "Failed to request tavern creation", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Tavern creation requested successfully"))
+}
+
+func (s *Server) handleHireCharacter(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	accountData, ok := r.Context().Value(model.ContextKeyAccountData).(*model.Account)
+	if !ok || accountData == nil {
+		http.Error(w, "Failed to retrieve account data from context", http.StatusInternalServerError)
+		return
+	}
+
+	message := model.HireCharacterRequest{}
+	resp, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, message)
+	if err != nil {
+		http.Error(w, "Failed to request character hire", http.StatusInternalServerError)
+		return
+	}
+
+	response, ok := resp.(model.HireCharacterResponse)
+	if !ok {
+		http.Error(w, "Invalid response from character hire request", http.StatusInternalServerError)
+		return
+	}
+
+	if !response.OK {
+		http.Error(w, "Failed to hire character: "+response.Error, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode hire character response", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	vars := mux.Vars(r)
+	characterID, ok := vars["characterId"]
+	if !ok {
+		http.Error(w, "Character ID is required", http.StatusBadRequest)
+		return
+	}
+
+	accountData, ok := r.Context().Value(model.ContextKeyAccountData).(*model.Account)
+	if !ok || accountData == nil {
+		http.Error(w, "Failed to retrieve account data from context", http.StatusInternalServerError)
+		return
+	}
+
+	req := model.GetCharacterRequest{
+		ID: characterID,
+	}
+
+	characterData, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, req)
+	if err != nil {
+		http.Error(w, "Failed to request character", http.StatusInternalServerError)
+		return
+	}
+
+	data, ok := characterData.(model.GetCharacterResponse)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, "Failed to encode character details", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleGetCharacters(w http.ResponseWriter, r *http.Request) {
+	span := telemetry.SpanFromRequest(r)
+
+	accountData, ok := r.Context().Value(model.ContextKeyAccountData).(*model.Account)
+	if !ok || accountData == nil {
+		http.Error(w, "Failed to retrieve account data from context", http.StatusInternalServerError)
+		return
+	}
+
+	req := model.GetCharactersRequest{}
+
+	characterData, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, req)
+	if err != nil {
+		http.Error(w, "Failed to request character", http.StatusInternalServerError)
+		return
+	}
+
+	data, ok := characterData.(model.GetCharactersResponse)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, "Failed to encode character details", http.StatusInternalServerError)
+		return
+	}
 }
