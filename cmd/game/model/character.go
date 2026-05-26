@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/google/uuid"
 )
 
@@ -15,19 +15,6 @@ type StopActionMessage struct {
 	CharacterID uuid.UUID `json:"character_id"`
 }
 
-/*
-type Character struct {
-	ID         uuid.UUID `json:"id"`
-	Name       string    `json:"name"`
-	Level      int       `json:"level"`
-	Experience int       `json:"experience"`
-	Status     uint8     `json:"status"`
-	Cooldown   int       `json:"cooldown"`
-	Action     Action    `json:"-"`
-
-	Inventory *Inventory `json:"inventory"`
-}
-*/
 type CharacterDetails struct {
 	ID         uuid.UUID `json:"id"`
 	Name       string    `json:"name"`

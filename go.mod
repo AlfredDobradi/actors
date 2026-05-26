@@ -4,7 +4,6 @@ go 1.26.2
 
 require (
 	aidanwoods.dev/go-paseto v1.6.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
@@ -17,6 +16,7 @@ require (
 	aidanwoods.dev/go-result v0.3.1 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect

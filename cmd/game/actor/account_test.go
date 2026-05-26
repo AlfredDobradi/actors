@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/game"
-	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/testhelper"
@@ -195,7 +195,7 @@ func TestReplayTicks(t *testing.T) {
 }
 
 func TestAccountJSONRoundTrip(t *testing.T) {
-	gold := &atomic.Uint64{}
+	gold := &atomic.Int64{}
 	gold.Store(1000)
 
 	testHero := &game.Character{
@@ -392,7 +392,7 @@ func TestAccountCreateTavern(t *testing.T) {
 func TestAccountHireCharacter(t *testing.T) {
 	tests := []struct {
 		label       string
-		gold        uint64
+		gold        int64
 		expectError bool
 	}{
 		{
@@ -409,7 +409,7 @@ func TestAccountHireCharacter(t *testing.T) {
 
 	for _, tt := range tests {
 		tf := func(t *testing.T) {
-			gold := &atomic.Uint64{}
+			gold := &atomic.Int64{}
 			gold.Store(tt.gold)
 
 			account := &AccountActor{

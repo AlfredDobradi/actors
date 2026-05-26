@@ -30,7 +30,7 @@ func (r Resource) Batch(ctx context.Context) int {
 
 	low := r.BatchSize[0]
 	high := r.BatchSize[1]
-	batchSize := rand.Intn(high-low+1) + low
+	batchSize := rand.Intn(high-low+1) + low //nolint
 
 	ctxLogger.Info("Determined batch size for resource", "resource", r.Name, "low", low, "high", high, "batchSize", batchSize)
 	return batchSize

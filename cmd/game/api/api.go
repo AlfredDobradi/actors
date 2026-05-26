@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/examples/game/api/middleware"
+	"github.com/alfreddobradi/actors/cmd/game/api/middleware"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"
@@ -32,7 +32,9 @@ func NewServer(sys *system.System, db database.DB) *Server {
 
 	s := &Server{
 		Server: &http.Server{
-			Handler: router,
+			Handler:      router,
+			ReadTimeout:  60,
+			WriteTimeout: 60,
 		},
 		sys:      sys,
 		db:       db,
@@ -42,7 +44,7 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Received request for unknown route", "method", r.Method, "path", r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Not found"))
+		w.Write([]byte("Not found")) //nolint:errcheck
 	})
 
 	router.HandleFunc("/auth/account", s.handleCreateAccount).Methods(http.MethodPost)
@@ -64,7 +66,7 @@ func NewServer(sys *system.System, db database.DB) *Server {
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Welcome to the game API"))
+		w.Write([]byte("Welcome to the game API")) //nolint:errcheck
 	})
 
 	return s

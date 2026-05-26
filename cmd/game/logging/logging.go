@@ -9,7 +9,7 @@ import (
 
 func Init() {
 	loggingConfig := config.GetConfig().Logging
-	level := slog.LevelInfo
+	var level slog.Level
 
 	switch loggingConfig.Level {
 	case "debug":

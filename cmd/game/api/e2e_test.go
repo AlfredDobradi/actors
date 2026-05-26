@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/alfreddobradi/actors/examples/game/actor"
-	"github.com/alfreddobradi/actors/examples/game/api"
-	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/actor"
+	"github.com/alfreddobradi/actors/cmd/game/api"
+	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/alfreddobradi/actors/pkg/system"

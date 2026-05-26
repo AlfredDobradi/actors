@@ -41,7 +41,7 @@ func (f *FightAction) Execute(ctx context.Context, character *Character) {
 
 	lowerBound := max(character.Level-5, 0)
 	upperBound := character.Level + 5
-	enemyRoll := rand.Intn(upperBound-lowerBound) + lowerBound
+	enemyRoll := rand.Intn(upperBound-lowerBound) + lowerBound //nolint
 	success := enemyRoll <= character.Level
 	ctxLogger.Info("Resolving fight", "characterLevel", character.Level, "enemyLevelRoll", enemyRoll, "success", success)
 	if success {
@@ -71,7 +71,7 @@ func (g *GatherAction) Execute(ctx context.Context, character *Character) {
 	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
 	ctxLogger.Info("Executing gather action", "resource", g.Resource.Name)
 
-	gatherChance := rand.Int31n(100)
+	gatherChance := rand.Int31n(100) //nolint
 	if g.Resource.Gather(ctx, gatherChance) {
 		batchSize := g.Resource.Batch(ctx)
 		character.Inventory.AddResource(g.Resource, batchSize)

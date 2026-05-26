@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-func HeroPriceMultiplier(heroAmount int) uint64 {
-	bands := [][2]uint{
+func HeroPriceMultiplier(heroAmount int) int64 {
+	bands := [][2]int{
 		{3, 1},
 		{6, 2},
 		{12, 3},
@@ -18,8 +18,8 @@ func HeroPriceMultiplier(heroAmount int) uint64 {
 
 	for _, band := range bands {
 		amount, multiplier := band[0], band[1]
-		if heroAmount <= int(amount) {
-			return uint64(multiplier)
+		if heroAmount <= amount {
+			return int64(multiplier)
 		}
 	}
 	return 5
