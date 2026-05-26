@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/game"
-	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/database"
 	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"

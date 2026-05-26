@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/alfreddobradi/actors/examples/game/actor"
-	"github.com/alfreddobradi/actors/examples/game/api"
-	"github.com/alfreddobradi/actors/examples/game/logging"
+	"github.com/alfreddobradi/actors/cmd/game/actor"
+	"github.com/alfreddobradi/actors/cmd/game/api"
+	"github.com/alfreddobradi/actors/cmd/game/logging"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/etcd"

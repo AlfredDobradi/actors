@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/examples/game/api/middleware"
+	"github.com/alfreddobradi/actors/cmd/game/api/middleware"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"

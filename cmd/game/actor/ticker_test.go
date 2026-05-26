@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	pkgmodel "github.com/alfreddobradi/actors/pkg/model"

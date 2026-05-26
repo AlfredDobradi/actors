@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/database/memory"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
