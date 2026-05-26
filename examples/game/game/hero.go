@@ -8,6 +8,23 @@ import (
 	"github.com/google/uuid"
 )
 
+func HeroPriceMultiplier(heroAmount int) uint64 {
+	bands := [][2]uint{
+		{3, 1},
+		{6, 2},
+		{12, 3},
+		{21, 4},
+	}
+
+	for _, band := range bands {
+		amount, multiplier := band[0], band[1]
+		if heroAmount <= int(amount) {
+			return uint64(multiplier)
+		}
+	}
+	return 5
+}
+
 type Tavern struct {
 	mx *sync.Mutex
 

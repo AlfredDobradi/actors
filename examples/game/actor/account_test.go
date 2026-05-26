@@ -388,3 +388,57 @@ func TestAccountCreateTavern(t *testing.T) {
 		t.Run(tt.label, tf)
 	}
 }
+
+func TestAccountHireCharacter(t *testing.T) {
+	tests := []struct {
+		label       string
+		gold        uint64
+		expectError bool
+	}{
+		{
+			label:       "Sufficient Gold",
+			gold:        5000,
+			expectError: false,
+		},
+		{
+			label:       "Insufficient Gold",
+			gold:        1,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tf := func(t *testing.T) {
+			gold := &atomic.Uint64{}
+			gold.Store(tt.gold)
+
+			account := &AccountActor{
+				mx:     &sync.Mutex{},
+				ID:     uuid.New(),
+				Name:   "TestAccount",
+				Tavern: game.NewTavern("TestTavern"),
+				Gold:   gold,
+			}
+
+			ctx := context.Background()
+			hireMessage := &system.Message{
+				ID:        uuid.New(),
+				Sender:    uuid.Nil,
+				Payload:   model.HireCharacterRequest{},
+				Recipient: system.Recipient{Kind: system.RecipientKindActor, Subject: account.ID.String()},
+			}
+
+			err := account.hireCharacter(ctx, hireMessage)
+			if tt.expectError {
+				require.Error(t, err)
+				require.Equal(t, tt.gold, account.Gold.Load())
+				require.Equal(t, 0, len(account.Tavern.Characters()))
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.gold-1000, account.Gold.Load())
+				require.Equal(t, 1, len(account.Tavern.Characters()))
+			}
+		}
+		t.Run(tt.label, tf)
+	}
+}

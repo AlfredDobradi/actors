@@ -2,7 +2,7 @@ package actor
 
 import "fmt"
 
-// TODO: organizer errors better
+// TODO: organize errors better
 
 type ErrInvalidMessage struct {
 	Kind string

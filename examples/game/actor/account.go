@@ -177,6 +177,16 @@ func (h *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) s
 
 	slog.Info("Received request to hire character", "actor_id", h.GetID(), "message_id", msg.GetID())
 
+	// check whether account has enough gold
+	cost := game.HeroPriceMultiplier(len(h.Tavern.Characters())) * 1000
+
+	if cost > h.Gold.Load() {
+		msg.Respond(h.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", h.Gold.Load(), cost)}) //nolint:errcheck
+		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %d, need %d", h.Gold.Load(), cost))
+	} else {
+		h.Gold.Add(^uint64(cost - 1))
+	}
+
 	firstNames := []string{"Arin", "Bel", "Cal", "Dain", "Eli"}
 	lastNames := []string{"Strong", "Swift", "Brave", "Clever", "Bold"}
 
@@ -307,7 +317,6 @@ func accountActorFactory(ctx context.Context) system.Actor {
 	return a
 }
 
-// TODO do tavern marshal separately
 func (a *AccountActor) MarshalJSON() ([]byte, error) {
 	gold := uint64(0)
 	if a.Gold != nil {
