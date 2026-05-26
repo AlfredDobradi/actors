@@ -20,25 +20,6 @@ func (s *Server) notImplementedHandler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
-// func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
-// 	span := telemetry.SpanFromRequest(r)
-// 	decoder := json.NewDecoder(r.Body)
-// 	var req model.GetCharacterRequest
-// 	if err := decoder.Decode(&req); err != nil {
-// 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-// 		return
-// 	}
-// 	defer r.Body.Close()
-
-// 	characterData, err := s.sys.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: "character"}, req)
-// 	if err != nil {
-// 		http.Error(w, "Failed to request character", http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	spew.Fdump(w, characterData)
-// }
-
 func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
 	span := telemetry.SpanFromRequest(r)
 	decoder := json.NewDecoder(r.Body)
