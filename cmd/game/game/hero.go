@@ -383,7 +383,7 @@ func NewHero(name string) Hero {
 		Energy:     100,
 		Gold:       100,
 		Inventory:  NewInventory(),
-		Action:     nil,
+		Action:     &IdleAction{},
 	}
 }
 
