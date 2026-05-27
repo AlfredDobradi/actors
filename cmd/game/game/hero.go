@@ -324,46 +324,6 @@ func (c *Hero) UnmarshalJSON(data []byte) error {
 		}
 
 		c.Action = decodedAction
-		// switch actionMap["_name"] {
-		// case ActionNameAdventure:
-		// 	var adventureAction AdventureAction
-		// 	if err := json.Unmarshal(aux.Action, &adventureAction); err != nil {
-		// 		return err
-		// 	}
-		// 	c.Action = &adventureAction
-		// case ActionNameGather:
-		// 	var gatherAction GatherAction
-		// 	if err := json.Unmarshal(aux.Action, &gatherAction); err != nil {
-		// 		return err
-		// 	}
-		// 	c.Action = &gatherAction
-		// case ActionNameIdle:
-		// 	var idleAction IdleAction
-		// 	if err := json.Unmarshal(aux.Action, &idleAction); err != nil {
-		// 		return err
-		// 	}
-		// 	c.Action = &idleAction
-		// case ActionNameHeal:
-		// 	var healAction HealAction
-		// 	if err := json.Unmarshal(aux.Action, &healAction); err != nil {
-		// 		return err
-		// 	}
-		// 	c.Action = &healAction
-		// case ActionNameRest:
-		// 	var restAction RestAction
-		// 	if err := json.Unmarshal(aux.Action, &restAction); err != nil {
-		// 		return err
-		// 	}
-		// 	c.Action = &restAction
-		// case ActionNameTavern:
-		// 	var tavernAction TavernAction
-		// 	if err := json.Unmarshal(aux.Action, &tavernAction); err != nil {
-		// 		return err
-		// 	}
-		// 	c.Action = &tavernAction
-		// default:
-		// 	return fmt.Errorf("unknown action type: %s", actionMap["_name"])
-		// }
 	} else {
 		c.Action = nil
 	}
