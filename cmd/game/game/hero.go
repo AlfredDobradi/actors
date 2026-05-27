@@ -32,7 +32,7 @@ func HeroPriceMultiplier(heroAmount int) int64 {
 }
 
 type Tavern struct {
-	mx *sync.Mutex
+	mx *sync.RWMutex
 
 	name       string
 	characters map[uuid.UUID]*Hero
@@ -40,7 +40,7 @@ type Tavern struct {
 
 func NewTavern(name string) *Tavern {
 	return &Tavern{
-		mx: &sync.Mutex{},
+		mx: &sync.RWMutex{},
 
 		name:       name,
 		characters: make(map[uuid.UUID]*Hero),
@@ -61,7 +61,7 @@ func (t *Tavern) UnmarshalJSON(data []byte) error {
 	}
 
 	if t.mx == nil {
-		t.mx = &sync.Mutex{}
+		t.mx = &sync.RWMutex{}
 	}
 
 	t.mx.Lock()
@@ -76,8 +76,8 @@ func (t *Tavern) UnmarshalJSON(data []byte) error {
 }
 
 func (t *Tavern) MarshalJSON() ([]byte, error) {
-	t.mx.Lock()
-	defer t.mx.Unlock()
+	t.mx.RLock()
+	defer t.mx.RUnlock()
 
 	characters := make(map[uuid.UUID]Hero)
 	for id, character := range t.characters {
@@ -101,14 +101,14 @@ func (t *Tavern) AddCharacter(character *Hero) {
 }
 
 func (t *Tavern) Characters() map[uuid.UUID]*Hero {
-	t.mx.Lock()
-	defer t.mx.Unlock()
+	t.mx.RLock()
+	defer t.mx.RUnlock()
 	return t.characters
 }
 
 func (t *Tavern) GetCharacter(characterID uuid.UUID) (*Hero, bool) {
-	t.mx.Lock()
-	defer t.mx.Unlock()
+	t.mx.RLock()
+	defer t.mx.RUnlock()
 	if character, exists := t.characters[characterID]; exists {
 		return character, true
 	}
@@ -116,12 +116,12 @@ func (t *Tavern) GetCharacter(characterID uuid.UUID) (*Hero, bool) {
 }
 
 func (t *Tavern) ProcessTick(ctx context.Context) {
-	t.mx.Lock()
-	defer t.mx.Unlock()
-
+	t.mx.RLock()
 	if len(t.characters) == 0 {
+		t.mx.RUnlock()
 		return
 	}
+	t.mx.RUnlock()
 
 	wg := sync.WaitGroup{}
 	for id, character := range t.characters {
@@ -130,7 +130,10 @@ func (t *Tavern) ProcessTick(ctx context.Context) {
 			defer wg.Done()
 			slog.Debug("Processing tick for character", "characterID", character.ID, "characterName", character.Name)
 			character.ProcessTick(ctx)
+
+			t.mx.Lock()
 			t.characters[id] = character
+			t.mx.Unlock()
 		}(id, character)
 	}
 	wg.Wait()
@@ -361,6 +364,18 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 
 	if c.Action == nil || c.Action.GetName() == ActionNameIdle {
 		c.Action = c.WhatNext()
+
+		if c.Action.GetName() == ActionNameGather && c.Action.(*GatherAction).Resource.Name == "" {
+			roll := rand.Intn(100) //nolint:gosec
+			if roll < 50 {
+				c.Action = &GatherAction{Resource: Wood}
+			} else if roll < 80 {
+				c.Action = &GatherAction{Resource: Stone}
+			} else {
+				c.Action = &GatherAction{Resource: Iron}
+			}
+		}
+
 		c.Cooldown = c.Action.GetCooldown()
 		return
 	}
@@ -400,22 +415,4 @@ func (c *Hero) StopAction(ctx context.Context) {
 
 	c.Action = nil
 	c.Cooldown = 0
-}
-
-func (c *Hero) fight(ctx context.Context) { //nolint:unused
-	spanID := telemetry.SpanIDFromContext(ctx)
-	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
-
-	action := &FightAction{}
-	ctxLogger.Info("Character is performing fight action")
-	action.Execute(ctx, c)
-}
-
-func (c *Hero) gather(ctx context.Context) { //nolint:unused
-	spanID := telemetry.SpanIDFromContext(ctx)
-	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
-
-	action := &GatherAction{Resource: Wood}
-	ctxLogger.Info("Character is performing mine action", "resource", action.Resource.Name)
-	action.Execute(ctx, c)
 }

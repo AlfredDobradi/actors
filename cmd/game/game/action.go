@@ -2,8 +2,10 @@ package game
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math/rand"
+	"strings"
 
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 )
@@ -42,6 +44,33 @@ const (
 	ActionNameGather    = "gather"
 )
 
+type chanceEntry struct {
+	action Action
+	weight int
+}
+
+func debugChanceTable(table []chanceEntry) string {
+	steps := make([]int, len(table))
+	for i := range table {
+		if i == 0 {
+			steps[i] = table[i].weight
+		} else {
+			steps[i] = steps[i-1] + table[i].weight
+		}
+	}
+
+	b := strings.Builder{}
+	for i, entry := range table {
+		b.WriteString(
+			strings.TrimSpace(
+				fmt.Sprintf("%s: %d", entry.action.GetName(), steps[i]),
+			) + ", ",
+		)
+	}
+
+	return b.String()
+}
+
 func (c *Hero) WhatNext() Action {
 	if c.Health < 50 {
 		slog.Debug("Hero is low on health, deciding to heal", "characterID", c.ID, "characterName", c.Name, "health", c.Health)
@@ -51,11 +80,6 @@ func (c *Hero) WhatNext() Action {
 	if c.Energy < 50 {
 		slog.Debug("Hero is low on energy, deciding to rest", "characterID", c.ID, "characterName", c.Name, "energy", c.Energy)
 		return &RestAction{}
-	}
-
-	type chanceEntry struct {
-		action Action
-		weight int
 	}
 
 	chanceTable := []chanceEntry{
@@ -78,7 +102,7 @@ func (c *Hero) WhatNext() Action {
 
 	roll := rand.Intn(totalWeight) //nolint:gosec
 
-	slog.Debug("Deciding what to do...", "table", chanceTable, "roll", roll)
+	slog.Info("Deciding what to do...", "table", debugChanceTable(chanceTable), "roll", roll)
 
 	for _, entry := range chanceTable {
 		if roll < entry.weight {
