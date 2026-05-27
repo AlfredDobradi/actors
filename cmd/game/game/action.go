@@ -24,6 +24,15 @@ type Action interface {
 	String() string
 }
 
+var actionMap = map[string]Action{
+	ActionNameAdventure: &AdventureAction{},
+	ActionNameHeal:      &HealAction{},
+	ActionNameRest:      &RestAction{},
+	ActionNameIdle:      &IdleAction{},
+	ActionNameTavern:    &TavernAction{},
+	ActionNameGather:    &GatherAction{},
+}
+
 const (
 	ActionNameAdventure = "adventure"
 	ActionNameHeal      = "heal"

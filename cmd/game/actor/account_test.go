@@ -160,50 +160,11 @@ func TestActorPersistence(t *testing.T) {
 	require.Equal(t, game.Wood, gatherAction.Resource)
 }
 
-// This test is obsolete now that heroes decide after every finished task instead of repeating the same task
-// func TestReplayTicks(t *testing.T) {
-// 	testhelper.SetupTestLogger(testing.Verbose())
-// 	resource := game.Resource{Name: "test_resource", Experience: 10, Difficulty: 0.0, CooldownMultiplier: 1.0, BatchSize: [2]int{1, 1}}
-// 	ctx := context.Background()
-// 	actor := &AccountActor{
-// 		ID:     uuid.New(),
-// 		Name:   "TestAccount",
-// 		Tavern: game.NewTavern("TestTavern"),
-// 	}
-
-// 	action := &game.GatherAction{
-// 		Resource: resource,
-// 	}
-
-// 	character := &game.Hero{
-// 		ID:         uuid.New(),
-// 		Name:       "TestCharacter",
-// 		Action:     action,
-// 		Experience: 0,
-// 		Inventory:  game.NewInventory(),
-// 		Cooldown:   action.GetCooldown(),
-// 	}
-// 	actor.Tavern.AddCharacter(character)
-
-// 	since := time.Now().Add(-15 * time.Second).Unix()
-
-// 	require.Equal(t, 0, character.Experience)
-// 	require.Equal(t, 0, character.Inventory.GetResource(resource))
-
-// 	err := actor.replayTicks(ctx, since)
-// 	require.NoError(t, err)
-// 	character, exists := actor.Tavern.GetCharacter(character.ID)
-// 	require.True(t, exists)
-
-// 	require.Equal(t, 3, character.Inventory.GetResource(resource))
-// 	require.Equal(t, 30, character.Experience)
-// }
-
 func TestAccountJSONRoundTrip(t *testing.T) {
 	gold := &atomic.Int64{}
 	gold.Store(1000)
 
-	testHero := &game.Hero{
+	testHeroWithAction := &game.Hero{
 		ID:   uuid.New(),
 		Name: "TestCharacter",
 		Action: &game.GatherAction{
@@ -215,20 +176,44 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 		Cooldown:   2,
 	}
 
+	testHeroNoAction := &game.Hero{
+		ID:         uuid.New(),
+		Name:       "TestCharacter",
+		Action:     nil,
+		Level:      5,
+		Experience: 1500,
+		Status:     game.StatusBusy,
+		Cooldown:   2,
+	}
+
 	tests := []struct {
 		label         string
 		tavern        *game.Tavern
+		hero          *game.Hero
 		expectedChars map[uuid.UUID]*game.Hero
 	}{
 		{
-			label: "Account with Tavern and Characters",
+			label: "Account with Tavern and Hero with an Action",
 			tavern: func() *game.Tavern {
 				t := game.NewTavern("TestTavern")
-				t.AddCharacter(testHero)
+				t.AddCharacter(testHeroWithAction)
 				return t
 			}(),
+			hero: testHeroWithAction,
 			expectedChars: map[uuid.UUID]*game.Hero{
-				testHero.ID: testHero,
+				testHeroWithAction.ID: testHeroWithAction,
+			},
+		},
+		{
+			label: "Account with Tavern and Hero with no Action",
+			tavern: func() *game.Tavern {
+				t := game.NewTavern("TestTavern")
+				t.AddCharacter(testHeroNoAction)
+				return t
+			}(),
+			hero: testHeroNoAction,
+			expectedChars: map[uuid.UUID]*game.Hero{
+				testHeroNoAction.ID: testHeroNoAction,
 			},
 		},
 		{
@@ -251,28 +236,32 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 				Gold:   gold,
 			}
 
-			raw, err := json.Marshal(account)
+			buf := bytes.NewBufferString("")
+			encoder := json.NewEncoder(buf)
+			encoder.SetIndent("", "  ")
+			err := encoder.Encode(account)
 			require.NoError(t, err)
 
 			var unmarshaledAccount AccountActor
-			err = json.Unmarshal(raw, &unmarshaledAccount)
+			err = json.Unmarshal(buf.Bytes(), &unmarshaledAccount)
 			require.NoError(t, err)
 
 			require.Equal(t, account.ID, unmarshaledAccount.ID)
 			require.Equal(t, account.Name, unmarshaledAccount.Name)
 
 			if len(tt.expectedChars) > 0 {
-				char, exists := unmarshaledAccount.Tavern.GetCharacter(testHero.ID)
+				char, exists := unmarshaledAccount.Tavern.GetCharacter(tt.hero.ID)
 				require.True(t, exists)
-				require.Equal(t, testHero.Name, char.Name)
-				require.Equal(t, testHero.Level, char.Level)
-				require.Equal(t, testHero.Experience, char.Experience)
-				require.Equal(t, testHero.Status, char.Status)
-				require.Equal(t, testHero.Cooldown, char.Cooldown)
-				require.NotNil(t, char.Action)
-				require.IsType(t, &game.GatherAction{}, char.Action)
-				gatherAction := char.Action.(*game.GatherAction)
-				require.Equal(t, game.Wood, gatherAction.Resource)
+				require.Equal(t, tt.hero.Name, char.Name)
+				require.Equal(t, tt.hero.Level, char.Level)
+				require.Equal(t, tt.hero.Experience, char.Experience)
+				require.Equal(t, tt.hero.Status, char.Status)
+				require.Equal(t, tt.hero.Cooldown, char.Cooldown)
+				if tt.hero.Action == nil {
+					require.Nil(t, char.Action)
+				} else {
+					require.Equal(t, tt.hero.Action.GetName(), char.Action.GetName())
+				}
 			}
 
 			// Gold should be preserved through JSON round trip

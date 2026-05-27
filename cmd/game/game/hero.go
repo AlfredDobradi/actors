@@ -1,6 +1,7 @@
 package game
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -299,26 +300,70 @@ func (c *Hero) UnmarshalJSON(data []byte) error {
 	c.Inventory = &aux.Inventory
 
 	if len(aux.Action) > 0 {
-		var actionMap map[string]interface{}
-		if err := json.Unmarshal(aux.Action, &actionMap); err != nil {
+		if bytes.Equal(aux.Action, []byte("null")) {
+			c.Action = nil
+			return nil
+		}
+
+		var actionRaw map[string]interface{}
+		if err := json.Unmarshal(aux.Action, &actionRaw); err != nil {
 			return err
 		}
-		switch actionMap["_name"] {
-		case "fight":
-			var fightAction FightAction
-			if err := json.Unmarshal(aux.Action, &fightAction); err != nil {
-				return err
-			}
-			c.Action = &fightAction
-		case "gather":
-			var gatherAction GatherAction
-			if err := json.Unmarshal(aux.Action, &gatherAction); err != nil {
-				return err
-			}
-			c.Action = &gatherAction
-		default:
-			return fmt.Errorf("unknown action type: %s", actionMap["_name"])
+		actionName, ok := actionRaw["_name"].(string)
+		if !ok {
+			return fmt.Errorf("action data missing _name field")
 		}
+
+		decodedAction, exists := actionMap[actionName]
+		if !exists {
+			return fmt.Errorf("unknown action type: %s", actionName)
+		}
+
+		if err := json.Unmarshal(aux.Action, &decodedAction); err != nil {
+			return err
+		}
+
+		c.Action = decodedAction
+		// switch actionMap["_name"] {
+		// case ActionNameAdventure:
+		// 	var adventureAction AdventureAction
+		// 	if err := json.Unmarshal(aux.Action, &adventureAction); err != nil {
+		// 		return err
+		// 	}
+		// 	c.Action = &adventureAction
+		// case ActionNameGather:
+		// 	var gatherAction GatherAction
+		// 	if err := json.Unmarshal(aux.Action, &gatherAction); err != nil {
+		// 		return err
+		// 	}
+		// 	c.Action = &gatherAction
+		// case ActionNameIdle:
+		// 	var idleAction IdleAction
+		// 	if err := json.Unmarshal(aux.Action, &idleAction); err != nil {
+		// 		return err
+		// 	}
+		// 	c.Action = &idleAction
+		// case ActionNameHeal:
+		// 	var healAction HealAction
+		// 	if err := json.Unmarshal(aux.Action, &healAction); err != nil {
+		// 		return err
+		// 	}
+		// 	c.Action = &healAction
+		// case ActionNameRest:
+		// 	var restAction RestAction
+		// 	if err := json.Unmarshal(aux.Action, &restAction); err != nil {
+		// 		return err
+		// 	}
+		// 	c.Action = &restAction
+		// case ActionNameTavern:
+		// 	var tavernAction TavernAction
+		// 	if err := json.Unmarshal(aux.Action, &tavernAction); err != nil {
+		// 		return err
+		// 	}
+		// 	c.Action = &tavernAction
+		// default:
+		// 	return fmt.Errorf("unknown action type: %s", actionMap["_name"])
+		// }
 	} else {
 		c.Action = nil
 	}
