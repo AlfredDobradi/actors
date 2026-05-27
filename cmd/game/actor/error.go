@@ -1,6 +1,9 @@
 package actor
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // TODO: organize errors better
 
@@ -70,4 +73,19 @@ func (e AccountError) Error() string {
 
 func NewAccountError(err error) AccountError {
 	return AccountError{Err: err}
+}
+
+type ErrReplayFailed struct {
+	Err            error
+	Timestamp      time.Time
+	TicksDone      int
+	TicksRemaining int
+}
+
+func (e ErrReplayFailed) IsRecoverable() bool {
+	return true
+}
+
+func (e ErrReplayFailed) Error() string {
+	return fmt.Sprintf("replay failed: %v (ticks done: %d, ticks remaining: %d, new timestamp: %v)", e.Err, e.TicksDone, e.TicksRemaining, e.Timestamp)
 }

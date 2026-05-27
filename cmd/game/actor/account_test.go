@@ -147,7 +147,7 @@ func TestActorPersistence(t *testing.T) {
 	require.NotNil(t, restoredAccount.Tavern)
 
 	gold := restoredAccount.Gold.Load()
-	require.Equal(t, uint64(3000), gold)
+	require.Equal(t, int64(3000), gold)
 
 	char, exists := restoredAccount.Tavern.GetCharacter(character.ID)
 	require.True(t, exists)
@@ -186,7 +186,8 @@ func TestReplayTicks(t *testing.T) {
 	require.Equal(t, 0, character.Experience)
 	require.Equal(t, 0, character.Inventory.GetResource(resource))
 
-	actor.replayTicks(ctx, since)
+	err := actor.replayTicks(ctx, since)
+	require.NoError(t, err)
 	character, exists := actor.Tavern.GetCharacter(character.ID)
 	require.True(t, exists)
 
@@ -195,7 +196,7 @@ func TestReplayTicks(t *testing.T) {
 }
 
 func TestAccountJSONRoundTrip(t *testing.T) {
-	gold := &atomic.Uint64{}
+	gold := &atomic.Int64{}
 	gold.Store(1000)
 
 	testHero := &game.Character{
@@ -272,7 +273,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 
 			// Gold should be preserved through JSON round trip
 			goldValue := unmarshaledAccount.Gold.Load()
-			require.Equal(t, uint64(1000), goldValue)
+			require.Equal(t, int64(1000), goldValue)
 
 			if tt.tavern != nil {
 				require.Equal(t, tt.tavern.Name(), unmarshaledAccount.Tavern.Name())
@@ -392,7 +393,7 @@ func TestAccountCreateTavern(t *testing.T) {
 func TestAccountHireCharacter(t *testing.T) {
 	tests := []struct {
 		label       string
-		gold        uint64
+		gold        int64
 		expectError bool
 	}{
 		{
@@ -409,7 +410,7 @@ func TestAccountHireCharacter(t *testing.T) {
 
 	for _, tt := range tests {
 		tf := func(t *testing.T) {
-			gold := &atomic.Uint64{}
+			gold := &atomic.Int64{}
 			gold.Store(tt.gold)
 
 			account := &AccountActor{

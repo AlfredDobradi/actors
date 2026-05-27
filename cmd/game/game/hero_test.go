@@ -10,7 +10,7 @@ import (
 func TestHeroPriceMultiplier(t *testing.T) {
 	type testCase struct {
 		heroAmount int
-		expected   uint64
+		expected   int64
 	}
 
 	testCases := []testCase{

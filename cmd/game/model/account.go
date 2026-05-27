@@ -3,6 +3,7 @@ package model
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +34,10 @@ type Account struct {
 func (a Account) String() string {
 	buf := bytes.NewBufferString("")
 	encoder := json.NewEncoder(buf)
-	encoder.Encode(a)
+	if err := encoder.Encode(a); err != nil {
+		slog.Error("Failed to encode account to JSON", "error", err, "account_id", a.ID)
+		return ""
+	}
 	return buf.String()
 }
 
@@ -58,7 +62,10 @@ type Session struct {
 func (s Session) String() string {
 	buf := bytes.NewBufferString("")
 	encoder := json.NewEncoder(buf)
-	encoder.Encode(s)
+	if err := encoder.Encode(s); err != nil {
+		slog.Error("Failed to encode session to JSON", "error", err, "session_id", s.ID)
+		return ""
+	}
 	return buf.String()
 }
 

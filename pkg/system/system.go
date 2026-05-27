@@ -348,6 +348,8 @@ func (s *System) startKeepalive(ctx context.Context) {
 }
 
 func (s *System) Shutdown(ctx context.Context) error {
+	slog.Info("Shutting down system", "system_id", s.id)
+
 	for _, handler := range s.registry.actors {
 		slog.Debug("Shutting down actor", "actorID", handler.GetID(), "kind", handler.GetKind())
 		handler.Stop()
