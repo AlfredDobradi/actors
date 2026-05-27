@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/alfreddobradi/actors/examples/game/actor"
-	"github.com/alfreddobradi/actors/examples/game/api"
-	"github.com/alfreddobradi/actors/examples/game/logging"
+	"github.com/alfreddobradi/actors/cmd/game/actor"
+	"github.com/alfreddobradi/actors/cmd/game/api"
+	"github.com/alfreddobradi/actors/cmd/game/logging"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/etcd"
@@ -18,7 +18,9 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		slog.Warn("No .env file found, relying on environment variables")
+	}
 
 	if err := config.Load("./config.yaml"); err != nil {
 		slog.Error("Failed to load config", "error", err)
@@ -49,7 +51,8 @@ func main() {
 	}
 
 	apiServer := api.NewServer(sys, db)
-	go apiServer.Start()
+
+	go apiServer.Start() //nolint
 
 	handlerTicker, err := sys.Spawn(ctx, "TickerActor")
 	if err != nil {
@@ -57,15 +60,14 @@ func main() {
 		return
 	}
 
-	slog.Info("Actors spawned successfully", "tickerActorID", handlerTicker.GetActor().GetID())
+	slog.Info("Actors spawned successfully", "ticker_actor_id", handlerTicker.GetActor().GetID())
 
 	// Wait for interrupt signal (Ctrl+C)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	slog.Info("Interrupt received, shutting down")
-	apiServer.Shutdown(ctx)
-	sys.Shutdown(ctx)
-	db.Close(ctx)
+	logging.LogError(apiServer.Shutdown(ctx), "Failed to shutdown API server")
+	logging.LogError(sys.Shutdown(ctx), "Failed to shutdown system")
+	logging.LogError(db.Close(ctx), "Failed to close database")
 }

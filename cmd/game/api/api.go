@@ -5,8 +5,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
-	"github.com/alfreddobradi/actors/examples/game/api/middleware"
+	"github.com/alfreddobradi/actors/cmd/game/api/middleware"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"
@@ -32,7 +33,10 @@ func NewServer(sys *system.System, db database.DB) *Server {
 
 	s := &Server{
 		Server: &http.Server{
-			Handler: router,
+			Handler:      router,
+			ReadTimeout:  60 * time.Second,
+			WriteTimeout: 60 * time.Second,
+			IdleTimeout:  120 * time.Second,
 		},
 		sys:      sys,
 		db:       db,
@@ -42,7 +46,9 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Received request for unknown route", "method", r.Method, "path", r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Not found"))
+		if _, err := w.Write([]byte("Not found")); err != nil {
+			slog.Warn("Failed to write response", "error", err)
+		}
 	})
 
 	router.HandleFunc("/auth/account", s.handleCreateAccount).Methods(http.MethodPost)
@@ -64,10 +70,17 @@ func NewServer(sys *system.System, db database.DB) *Server {
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Welcome to the game API"))
+		if _, err := w.Write([]byte("Welcome to the game API")); err != nil {
+			slog.Warn("Failed to write response", "error", err)
+		}
 	})
 
 	return s
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	slog.Info("Shutting down API server")
+	return s.Server.Shutdown(ctx)
 }
 
 func (s *Server) Addr() string {

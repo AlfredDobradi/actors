@@ -9,7 +9,7 @@ import (
 
 func Init() {
 	loggingConfig := config.GetConfig().Logging
-	level := slog.LevelInfo
+	var level slog.Level
 
 	switch loggingConfig.Level {
 	case "debug":
@@ -46,4 +46,10 @@ func Init() {
 	slog.SetDefault(
 		slog.New(handler),
 	)
+}
+
+func LogError(err error, message string) {
+	if err != nil {
+		slog.Error(message, "error", err)
+	}
 }

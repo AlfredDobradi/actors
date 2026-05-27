@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/examples/game/game"
-	"github.com/alfreddobradi/actors/examples/game/model"
-	"github.com/alfreddobradi/actors/examples/game/paseto"
-	"github.com/alfreddobradi/actors/examples/game/repository"
+	"github.com/alfreddobradi/actors/cmd/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/paseto"
+	"github.com/alfreddobradi/actors/cmd/game/repository"
 	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func (s *Server) notImplementedHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) notImplementedHandler(w http.ResponseWriter, r *http.Request) { //nolint:unused
 	http.Error(w, "Not implemented", http.StatusNotImplemented)
 }
 
@@ -68,7 +68,9 @@ func (s *Server) handleStartAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Action " + httpReq.Action + " started successfully"))
+	if _, err := w.Write([]byte("Action " + httpReq.Action + " started successfully")); err != nil {
+		slog.Warn("Failed to write response", "error", err)
+	}
 }
 
 func (s *Server) handleStopAction(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +99,9 @@ func (s *Server) handleStopAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Action stopped successfully"))
+	if _, err := w.Write([]byte("Action stopped successfully")); err != nil {
+		slog.Warn("Failed to write response", "error", err)
+	}
 }
 
 func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +126,9 @@ func (s *Server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(account)
+	if err := json.NewEncoder(w).Encode(account); err != nil {
+		slog.Warn("Failed to write response", "error", err)
+	}
 }
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +177,9 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		slog.Warn("Failed to write response", "error", err)
+	}
 }
 
 func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +203,9 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Session deleted successfully"))
+	if _, err := w.Write([]byte("Session deleted successfully")); err != nil {
+		slog.Warn("Failed to write response", "error", err)
+	}
 }
 
 func (s *Server) handleCreateTavern(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +231,9 @@ func (s *Server) handleCreateTavern(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Tavern creation requested successfully"))
+	if _, err := w.Write([]byte("Tavern creation requested successfully")); err != nil {
+		slog.Warn("Failed to write response", "error", err)
+	}
 }
 
 func (s *Server) handleHireCharacter(w http.ResponseWriter, r *http.Request) {
@@ -284,6 +296,10 @@ func (s *Server) handleGetCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, ok := characterData.(model.GetCharacterResponse)
+	if !ok {
+		http.Error(w, "Invalid response from character request", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(data); err != nil {
@@ -310,6 +326,10 @@ func (s *Server) handleGetCharacters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data, ok := characterData.(model.GetCharactersResponse)
+	if !ok {
+		http.Error(w, "Invalid response from character request", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(data); err != nil {

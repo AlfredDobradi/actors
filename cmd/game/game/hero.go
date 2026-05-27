@@ -3,13 +3,15 @@ package game
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"math/rand"
 	"sync"
 
 	"github.com/google/uuid"
 )
 
-func HeroPriceMultiplier(heroAmount int) uint64 {
-	bands := [][2]uint{
+func HeroPriceMultiplier(heroAmount int) int64 {
+	bands := [][2]int{
 		{3, 1},
 		{6, 2},
 		{12, 3},
@@ -19,7 +21,7 @@ func HeroPriceMultiplier(heroAmount int) uint64 {
 	for _, band := range bands {
 		amount, multiplier := band[0], band[1]
 		if heroAmount <= int(amount) {
-			return uint64(multiplier)
+			return int64(multiplier)
 		}
 	}
 	return 5
@@ -123,4 +125,13 @@ func (t *Tavern) ProcessTick(ctx context.Context) {
 		}(id, character)
 	}
 	wg.Wait()
+}
+
+func GenerateRandomCharacter() Character {
+	firstNames := []string{"Arin", "Bel", "Cal", "Dain", "Eli"}
+	lastNames := []string{"Strong", "Swift", "Brave", "Clever", "Bold"}
+
+	name := fmt.Sprintf("%s %s", firstNames[rand.Intn(len(firstNames))], lastNames[rand.Intn(len(lastNames))]) //nolint:gosec
+	character := NewCharacter(name)
+	return character
 }

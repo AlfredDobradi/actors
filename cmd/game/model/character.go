@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/alfreddobradi/actors/examples/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/google/uuid"
 )
 

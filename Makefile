@@ -1,7 +1,7 @@
 .PHONY: build run clean
 
 build:
-	go build -o bin/game ./examples/game/main.go
+	go build -o bin/game ./cmd/game/main.go
 
 run: build
 	./bin/game

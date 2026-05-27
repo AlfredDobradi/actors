@@ -255,7 +255,7 @@ func (c *Character) StopAction(ctx context.Context) {
 	c.Cooldown = 0
 }
 
-func (c *Character) fight(ctx context.Context) {
+func (c *Character) fight(ctx context.Context) { //nolint:unused
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
 
@@ -264,7 +264,7 @@ func (c *Character) fight(ctx context.Context) {
 	action.Execute(ctx, c)
 }
 
-func (c *Character) gather(ctx context.Context) {
+func (c *Character) gather(ctx context.Context) { //nolint:unused
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
 

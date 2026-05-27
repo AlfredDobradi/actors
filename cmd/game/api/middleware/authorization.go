@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/alfreddobradi/actors/examples/game/model"
-	"github.com/alfreddobradi/actors/examples/game/paseto"
-	"github.com/alfreddobradi/actors/examples/game/repository"
+	"github.com/alfreddobradi/actors/cmd/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/paseto"
+	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/database"
 )
 
