@@ -72,8 +72,6 @@ func (a *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) 
 		return database.Snapshot{}, err
 	}
 
-	fmt.Println(string(raw))
-
 	return database.NewSnapshot(raw), nil
 }
 
@@ -81,8 +79,6 @@ func (a *AccountActor) restore(ctx context.Context, snapshot database.Snapshot) 
 	if snapshot.Data == nil {
 		return fmt.Errorf("no snapshot data provided for restoration")
 	}
-
-	fmt.Println(string(snapshot.Data))
 
 	var aux AccountActor
 	if err := json.Unmarshal(snapshot.Data, &aux); err != nil {
