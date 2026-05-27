@@ -399,7 +399,7 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
 
-	if c.Action == nil {
+	if c.Action == nil || c.Action.GetName() == ActionNameIdle {
 		c.Action = c.WhatNext()
 		c.Cooldown = c.Action.GetCooldown()
 		return
@@ -412,7 +412,7 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 	}
 
 	c.Action.Execute(ctx, c)
-	c.Action = nil
+	c.Action = &IdleAction{}
 	c.Cooldown = 0
 }
 
