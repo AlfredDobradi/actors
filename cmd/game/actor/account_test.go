@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
@@ -120,7 +119,7 @@ func TestActorPersistence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, actorHandler)
 
-	character := &game.Character{
+	character := &game.Hero{
 		ID:   uuid.New(),
 		Name: "TestCharacter",
 		Action: &game.GatherAction{
@@ -161,45 +160,50 @@ func TestActorPersistence(t *testing.T) {
 	require.Equal(t, game.Wood, gatherAction.Resource)
 }
 
-func TestReplayTicks(t *testing.T) {
-	testhelper.SetupTestLogger(testing.Verbose())
-	resource := game.Resource{Name: "test_resource", Experience: 10, Difficulty: 0.0, CooldownMultiplier: 1.0, BatchSize: [2]int{1, 1}}
-	ctx := context.Background()
-	actor := &AccountActor{
-		ID:     uuid.New(),
-		Name:   "TestAccount",
-		Tavern: game.NewTavern("TestTavern"),
-	}
-	character := &game.Character{
-		ID:   uuid.New(),
-		Name: "TestCharacter",
-		Action: &game.GatherAction{
-			Resource: resource,
-		},
-		Experience: 0,
-		Inventory:  game.NewInventory(),
-	}
-	actor.Tavern.AddCharacter(character)
+// This test is obsolete now that heroes decide after every finished task instead of repeating the same task
+// func TestReplayTicks(t *testing.T) {
+// 	testhelper.SetupTestLogger(testing.Verbose())
+// 	resource := game.Resource{Name: "test_resource", Experience: 10, Difficulty: 0.0, CooldownMultiplier: 1.0, BatchSize: [2]int{1, 1}}
+// 	ctx := context.Background()
+// 	actor := &AccountActor{
+// 		ID:     uuid.New(),
+// 		Name:   "TestAccount",
+// 		Tavern: game.NewTavern("TestTavern"),
+// 	}
 
-	since := time.Now().Add(-15 * time.Second).Unix()
+// 	action := &game.GatherAction{
+// 		Resource: resource,
+// 	}
 
-	require.Equal(t, 0, character.Experience)
-	require.Equal(t, 0, character.Inventory.GetResource(resource))
+// 	character := &game.Hero{
+// 		ID:         uuid.New(),
+// 		Name:       "TestCharacter",
+// 		Action:     action,
+// 		Experience: 0,
+// 		Inventory:  game.NewInventory(),
+// 		Cooldown:   action.GetCooldown(),
+// 	}
+// 	actor.Tavern.AddCharacter(character)
 
-	err := actor.replayTicks(ctx, since)
-	require.NoError(t, err)
-	character, exists := actor.Tavern.GetCharacter(character.ID)
-	require.True(t, exists)
+// 	since := time.Now().Add(-15 * time.Second).Unix()
 
-	require.Equal(t, 3, character.Inventory.GetResource(resource))
-	require.Equal(t, 30, character.Experience)
-}
+// 	require.Equal(t, 0, character.Experience)
+// 	require.Equal(t, 0, character.Inventory.GetResource(resource))
+
+// 	err := actor.replayTicks(ctx, since)
+// 	require.NoError(t, err)
+// 	character, exists := actor.Tavern.GetCharacter(character.ID)
+// 	require.True(t, exists)
+
+// 	require.Equal(t, 3, character.Inventory.GetResource(resource))
+// 	require.Equal(t, 30, character.Experience)
+// }
 
 func TestAccountJSONRoundTrip(t *testing.T) {
 	gold := &atomic.Int64{}
 	gold.Store(1000)
 
-	testHero := &game.Character{
+	testHero := &game.Hero{
 		ID:   uuid.New(),
 		Name: "TestCharacter",
 		Action: &game.GatherAction{
@@ -214,7 +218,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 	tests := []struct {
 		label         string
 		tavern        *game.Tavern
-		expectedChars map[uuid.UUID]*game.Character
+		expectedChars map[uuid.UUID]*game.Hero
 	}{
 		{
 			label: "Account with Tavern and Characters",
@@ -223,14 +227,14 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 				t.AddCharacter(testHero)
 				return t
 			}(),
-			expectedChars: map[uuid.UUID]*game.Character{
+			expectedChars: map[uuid.UUID]*game.Hero{
 				testHero.ID: testHero,
 			},
 		},
 		{
 			label:         "Account with Empty Tavern",
 			tavern:        game.NewTavern("EmptyTavern"),
-			expectedChars: map[uuid.UUID]*game.Character{},
+			expectedChars: map[uuid.UUID]*game.Hero{},
 		},
 		{
 			label:  "Account with No Tavern",
@@ -296,7 +300,7 @@ func TestAccountUnmarshalJSON(t *testing.T) {
 	inventory := game.NewInventory()
 	inventory.AddResource(game.Wood, 10)
 
-	character := &game.Character{
+	character := &game.Hero{
 		ID:         uuid.New(),
 		Name:       "TestCharacter",
 		Level:      5,

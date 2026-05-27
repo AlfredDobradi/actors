@@ -24,7 +24,7 @@ type CharacterDetails struct {
 	Action     string    `json:"action"`
 }
 
-func DetailsFromCharacter(c *game.Character) CharacterDetails {
+func DetailsFromCharacter(c *game.Hero) CharacterDetails {
 	action := "is not currently doing anything"
 	if c.Action != nil {
 		action = c.Action.String()

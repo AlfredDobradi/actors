@@ -72,6 +72,8 @@ func (a *AccountActor) Snapshot(ctx context.Context) (database.Snapshot, error) 
 		return database.Snapshot{}, err
 	}
 
+	fmt.Println(string(raw))
+
 	return database.NewSnapshot(raw), nil
 }
 
@@ -79,6 +81,8 @@ func (a *AccountActor) restore(ctx context.Context, snapshot database.Snapshot) 
 	if snapshot.Data == nil {
 		return fmt.Errorf("no snapshot data provided for restoration")
 	}
+
+	fmt.Println(string(snapshot.Data))
 
 	var aux AccountActor
 	if err := json.Unmarshal(snapshot.Data, &aux); err != nil {
@@ -120,7 +124,9 @@ func (a *AccountActor) processTick(ctx context.Context, _ *system.Message) syste
 	ctxLogger := slog.With("span_id", spanID)
 	ctxLogger.Debug("Processing tick in account actor", "actor_id", a.GetID())
 
-	a.Tavern.ProcessTick(ctx)
+	if a.Tavern != nil {
+		a.Tavern.ProcessTick(ctx)
+	}
 	return nil
 }
 

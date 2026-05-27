@@ -26,7 +26,7 @@ func TestXpForLevel(t *testing.T) {
 }
 
 func TestGainExperience(t *testing.T) {
-	char := Character{
+	char := Hero{
 		ID:         uuid.New(),
 		Name:       "Test Character",
 		Level:      1,

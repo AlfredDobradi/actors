@@ -154,12 +154,12 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.sys.IsActorSpawned(r.Context(), account.ID) == sysmodel.ActorStateNotFound {
-		if _, err := s.sys.AttemptRestoreActor(span.Context(), "AccountActor", model.AccountActorParams{ID: account.ID}); err != nil {
+		if _, err := s.sys.AttemptRestoreActor(span.Context(), "AccountActor", model.AccountActorParams{ID: account.ID}, system.WithSubscription("tick")); err != nil {
 			slog.Warn("Failed to restore account actor", "error", err, "accountID", account.ID)
 		}
 
 		// Actor not found, spawn a new one
-		if _, err := s.sys.SpawnWithParams(span.Context(), "AccountActor", model.AccountActorParams{ID: account.ID, Name: account.Username}); err != nil {
+		if _, err := s.sys.SpawnWithParams(span.Context(), "AccountActor", model.AccountActorParams{ID: account.ID, Name: account.Username}, system.WithSubscription("tick")); err != nil {
 			slog.Error("Failed to spawn account actor", "error", err, "accountID", account.ID)
 			http.Error(w, "Failed to spawn account actor", http.StatusInternalServerError)
 			return
