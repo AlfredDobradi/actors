@@ -147,3 +147,45 @@ func TestHeroReplayTicks(t *testing.T) {
 		t.Run(tt.label, tf)
 	}
 }
+
+func BenchmarkHeroReplayTicksIncremental(b *testing.B) {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
+	hero := &Hero{
+		ID:        uuid.New(),
+		Health:    100,
+		Energy:    100,
+		Gold:      1000,
+		Action:    nil,
+		Inventory: NewInventory(),
+	}
+
+	ticks := 1000
+
+	for b.Loop() {
+		for range ticks {
+			hero.ProcessTick(context.Background())
+		}
+	}
+}
+
+func BenchmarkHeroReplayTicksOptimized(b *testing.B) {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
+	hero := &Hero{
+		ID:        uuid.New(),
+		Health:    100,
+		Energy:    100,
+		Gold:      1000,
+		Action:    nil,
+		Inventory: NewInventory(),
+	}
+
+	ticks := 1000
+
+	for b.Loop() {
+		hero.ReplayTicks(context.Background(), ticks)
+	}
+}
