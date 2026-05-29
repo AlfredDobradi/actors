@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -71,4 +72,78 @@ func TestHeroDecideWhatToDo(t *testing.T) {
 		t.Run(tt.label, tf)
 	}
 
+}
+
+type TestAction struct {
+	name     string
+	cooldown int
+}
+
+func (a *TestAction) GetName() string {
+	return a.name
+}
+
+func (a *TestAction) GetCooldown() int {
+	return a.cooldown
+}
+
+func (a *TestAction) Execute(ctx context.Context, hero *Hero) {
+	hero.Experience += 1
+}
+
+func (a *TestAction) String() string {
+	return fmt.Sprintf("%s-ing", a.name)
+}
+
+func TestHeroReplayTicks(t *testing.T) {
+	// slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	action := &TestAction{name: "test", cooldown: 15}
+
+	tests := []struct {
+		label              string
+		ticks              int
+		action             Action
+		cooldownCheck      func(i int) bool
+		expectedExperience int
+	}{
+		{
+			label:  "Replay 10 ticks on a 15 tick action",
+			ticks:  10,
+			action: action,
+			cooldownCheck: func(i int) bool {
+				return i == 5
+			},
+			expectedExperience: 0,
+		},
+		{
+			label:  "Replay 20 ticks on a 15 tick action",
+			ticks:  20,
+			action: action,
+			cooldownCheck: func(i int) bool {
+				return i > 0
+			},
+			expectedExperience: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		tf := func(t *testing.T) {
+			hero := &Hero{
+				ID:       uuid.New(),
+				Health:   100,
+				Energy:   100,
+				Gold:     1000,
+				Action:   tt.action,
+				Cooldown: tt.action.GetCooldown(),
+			}
+
+			err := hero.ReplayTicks(context.Background(), tt.ticks)
+			require.NoError(t, err)
+			require.True(t, tt.cooldownCheck(hero.Cooldown), "Cooldown after replaying ticks did not match expected value")
+			require.Equal(t, tt.expectedExperience, hero.Experience, "Experience after replaying ticks did not match expected value")
+		}
+
+		t.Run(tt.label, tf)
+	}
 }

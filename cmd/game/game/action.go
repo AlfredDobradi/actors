@@ -104,14 +104,30 @@ func (c *Hero) WhatNext() Action {
 
 	slog.Info("Deciding what to do...", "table", debugChanceTable(chanceTable), "roll", roll)
 
+	var action Action
 	for _, entry := range chanceTable {
 		if roll < entry.weight {
-			return entry.action
+			action = entry.action
+			break
 		}
 		roll -= entry.weight
 	}
 
-	return &IdleAction{}
+	if action.GetName() == ActionNameGather && action.(*GatherAction).Resource.Name == "" {
+		roll := rand.Intn(100) //nolint:gosec
+		if roll < 50 {
+			action = &GatherAction{Resource: Wood}
+		} else if roll < 80 {
+			action = &GatherAction{Resource: Stone}
+		} else {
+			action = &GatherAction{Resource: Iron}
+		}
+	}
+
+	if action == nil {
+		return &IdleAction{}
+	}
+	return action
 }
 
 type FightAction struct{}
