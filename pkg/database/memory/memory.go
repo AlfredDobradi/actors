@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/alfreddobradi/actors/pkg/database"
@@ -35,15 +36,31 @@ func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	return nil
 }
 
-func (s *Store) Get(ctx context.Context, key string) (string, bool) {
+func (s *Store) Get(ctx context.Context, key string, prefix string) (map[string]string, bool) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Getting key from database", "key", key)
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	val, ok := s.data[key]
-	return val, ok
+	result := make(map[string]string, 0)
+
+	if prefix != "" {
+		for k, v := range s.data {
+			if strings.HasPrefix(k, prefix) {
+				result[k] = v
+			}
+		}
+	} else {
+		val, ok := s.data[key]
+		if !ok {
+			return result, ok
+		}
+
+		result[key] = val
+	}
+
+	return result, true
 }
 
 func (s *Store) Delete(ctx context.Context, key string) error {

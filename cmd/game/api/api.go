@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alfreddobradi/actors/cmd/game/api/handler"
 	"github.com/alfreddobradi/actors/cmd/game/api/middleware"
+	"github.com/alfreddobradi/actors/cmd/game/api/state"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/system"
@@ -17,8 +19,7 @@ import (
 type Server struct {
 	*http.Server
 
-	sys      *system.System
-	db       database.DB
+	context  *state.Context
 	listener net.Listener
 }
 
@@ -31,6 +32,8 @@ func NewServer(sys *system.System, db database.DB) *Server {
 		return nil
 	}
 
+	stateCtx := state.New(db, sys)
+
 	s := &Server{
 		Server: &http.Server{
 			Handler:      router,
@@ -38,8 +41,7 @@ func NewServer(sys *system.System, db database.DB) *Server {
 			WriteTimeout: 60 * time.Second,
 			IdleTimeout:  120 * time.Second,
 		},
-		sys:      sys,
-		db:       db,
+		context:  &stateCtx,
 		listener: listener,
 	}
 
@@ -51,22 +53,23 @@ func NewServer(sys *system.System, db database.DB) *Server {
 		}
 	})
 
-	router.HandleFunc("/auth/account", s.handleCreateAccount).Methods(http.MethodPost)
-	router.HandleFunc("/auth/session", s.handleCreateSession).Methods(http.MethodPost)
-	router.HandleFunc("/auth/session", s.handleDeleteSession).Methods(http.MethodDelete)
+	router.HandleFunc("/auth/account", handler.HandleCreateAccount(s.context)).Methods(http.MethodPost)
+	router.HandleFunc("/auth/session", handler.HandleCreateSession(s.context)).Methods(http.MethodPost)
+	router.HandleFunc("/auth/session", handler.HandleDeleteSession(s.context)).Methods(http.MethodDelete)
+
+	admin := router.PathPrefix("/admin").Subrouter()
+	admin.Use(middleware.Authorization(db))
+	admin.HandleFunc("/accounts", handler.NotImplementedHandler(s.context)).Methods(http.MethodGet)
+	admin.HandleFunc("/accounts/{accountId}", handler.NotImplementedHandler(s.context)).Methods(http.MethodGet)
+	admin.HandleFunc("/sessions", handler.NotImplementedHandler(s.context)).Methods(http.MethodGet)
+	admin.HandleFunc("/sessions/{sessionId}", handler.NotImplementedHandler(s.context)).Methods(http.MethodGet)
 
 	a := router.PathPrefix("/account").Subrouter()
 	a.Use(middleware.Authorization(db))
-	a.HandleFunc("/tavern", s.handleCreateTavern).Methods(http.MethodPost)
-	a.HandleFunc("/tavern/characters", s.handleGetCharacters).Methods(http.MethodGet)
-	a.HandleFunc("/tavern/characters/hire", s.handleHireCharacter).Methods(http.MethodPost)
-	a.HandleFunc("/tavern/characters/{characterId}", s.handleGetCharacter).Methods(http.MethodGet)
-
-	c := router.PathPrefix("/character").Subrouter()
-	c.Use(middleware.Authorization(db))
-	c.HandleFunc("/", s.handleGetCharacter).Methods(http.MethodPost)
-	c.HandleFunc("/action", s.handleStartAction).Methods(http.MethodPost)
-	c.HandleFunc("/action", s.handleStopAction).Methods(http.MethodDelete)
+	a.HandleFunc("/tavern", handler.HandleCreateTavern(s.context)).Methods(http.MethodPost)
+	a.HandleFunc("/tavern/hire", handler.HandleHireCharacter(s.context)).Methods(http.MethodPost)
+	a.HandleFunc("/tavern/characters", handler.HandleGetCharacters(s.context)).Methods(http.MethodGet)
+	a.HandleFunc("/tavern/characters/{characterId}", handler.HandleGetCharacter(s.context)).Methods(http.MethodGet)
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

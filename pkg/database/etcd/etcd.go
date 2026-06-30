@@ -49,20 +49,30 @@ func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	return err
 }
 
-func (s *Store) Get(ctx context.Context, key string) (string, bool) {
+func (s *Store) Get(ctx context.Context, key string, prefix string) (map[string]string, bool) {
 	span := telemetry.SpanFromContext(ctx)
-	span.GetLogger().Info("Getting key from database", "key", key)
+	span.GetLogger().Info("Getting keys from database", "key", key, "prefix", prefix)
 
 	opts := []clientv3.OpOption{}
 	if database.UseLease(ctx) {
 		opts = append(opts, clientv3.WithLease(clientv3.LeaseID(s.sessionID)))
 	}
 
+	if prefix != "" {
+		opts = append(opts, clientv3.WithPrefix())
+	}
+
+	result := make(map[string]string)
+
 	resp, err := s.Client.Get(ctx, key, opts...)
 	if err != nil || len(resp.Kvs) == 0 {
-		return "", false
+		return result, false
 	}
-	return string(resp.Kvs[0].Value), true
+
+	for _, v := range resp.Kvs {
+		result[string(v.Key)] = string(v.Value)
+	}
+	return result, true
 }
 
 func (s *Store) Close(ctx context.Context) error {

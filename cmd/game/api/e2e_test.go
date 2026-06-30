@@ -143,7 +143,7 @@ func createTavern(t *testing.T, address, token string) (response, error) {
 func hireCharacter(t *testing.T, address, token string) (response, error) {
 	req, err := http.NewRequest(
 		http.MethodPost,
-		url(address, "/account/tavern/characters/hire"),
+		url(address, "/account/tavern/hire"),
 		nil,
 	)
 	require.NoError(t, err)

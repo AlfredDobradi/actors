@@ -23,13 +23,13 @@ func CheckAccountExists(ctx context.Context, db database.DB, req model.CreateAcc
 			continue
 		}
 
-		val, ok := db.Get(ctx, key)
+		val, ok := db.Get(ctx, key, "")
 		if !ok {
 			continue
 		}
 
 		var account model.Account
-		if err := json.Unmarshal([]byte(val), &account); err != nil {
+		if err := json.Unmarshal([]byte(val[key]), &account); err != nil {
 			continue
 		}
 
@@ -76,13 +76,13 @@ func ValidateCredentials(ctx context.Context, db database.DB, req model.CreateSe
 			continue
 		}
 
-		val, ok := db.Get(ctx, key)
+		val, ok := db.Get(ctx, key, "")
 		if !ok {
 			continue
 		}
 
 		var account model.Account
-		if err := json.Unmarshal([]byte(val), &account); err != nil {
+		if err := json.Unmarshal([]byte(val[key]), &account); err != nil {
 			continue
 		}
 
@@ -118,24 +118,24 @@ func GetAccountBySessionID(ctx context.Context, db database.DB, sessionID uuid.U
 	span.GetLogger().Info("Getting account by session ID", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	sessionVal, ok := db.Get(ctx, sessionKey)
+	sessionVal, ok := db.Get(ctx, sessionKey, "")
 	if !ok {
 		return model.Account{}, fmt.Errorf("session not found")
 	}
 
 	var session model.Session
-	if err := json.Unmarshal([]byte(sessionVal), &session); err != nil {
+	if err := json.Unmarshal([]byte(sessionVal[sessionKey]), &session); err != nil {
 		return model.Account{}, fmt.Errorf("invalid session data")
 	}
 
 	accountKey := "account:" + session.AccountID.String()
-	accountVal, ok := db.Get(ctx, accountKey)
+	accountVal, ok := db.Get(ctx, accountKey, "")
 	if !ok {
 		return model.Account{}, fmt.Errorf("account not found")
 	}
 
 	var account model.Account
-	if err := json.Unmarshal([]byte(accountVal), &account); err != nil {
+	if err := json.Unmarshal([]byte(accountVal[accountKey]), &account); err != nil {
 		return model.Account{}, fmt.Errorf("invalid account data")
 	}
 
@@ -147,13 +147,13 @@ func ValidateSession(ctx context.Context, db database.DB, sessionID uuid.UUID) e
 	span.GetLogger().Info("Validating session", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	sessionVal, ok := db.Get(ctx, sessionKey)
+	sessionVal, ok := db.Get(ctx, sessionKey, "")
 	if !ok {
 		return fmt.Errorf("session not found")
 	}
 
 	var session model.Session
-	if err := json.Unmarshal([]byte(sessionVal), &session); err != nil {
+	if err := json.Unmarshal([]byte(sessionVal[sessionKey]), &session); err != nil {
 		return fmt.Errorf("invalid session data")
 	}
 

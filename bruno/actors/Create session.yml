@@ -1,0 +1,21 @@
+info:
+  name: Create session
+  type: http
+
+http:
+  method: POST
+  url: http://127.0.0.1:8080/auth/session
+  body:
+    type: json
+    data: |-
+      {
+        "username": "brvy",
+        "password": "1234"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
