@@ -1,0 +1,14 @@
+info:
+  name: Admin - Get Account
+  type: http
+  seq: 7
+
+http:
+  method: get
+  url: http://127.0.0.1:8080/admin/accounts/09768e71-7e37-4ab9-bbcb-805fa313e5bc
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

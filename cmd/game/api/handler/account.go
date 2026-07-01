@@ -106,7 +106,7 @@ func HandleDeleteSession(s *state.Context) func(w http.ResponseWriter, r *http.R
 			return
 		}
 
-		if err := repository.ValidateSession(r.Context(), s.DB, sessionID); err != nil {
+		if err := repository.ValidateSession(span.Context(), s.DB, sessionID); err != nil {
 			slog.Error("Invalid session", "error", err)
 			http.Error(w, "Invalid session", http.StatusBadRequest)
 			return

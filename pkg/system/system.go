@@ -527,7 +527,7 @@ func (s *System) IsActorSpawned(ctx context.Context, actorID uuid.UUID) model.Ac
 
 	// lookup actor in the store
 	key := fmt.Sprintf("actor:%s:hostname", actorID)
-	if _, ok := s.store.Get(ctx, key, ""); ok {
+	if _, ok := s.store.Get(ctx, key, false); ok {
 		return model.ActorStateRemote
 	}
 

@@ -23,7 +23,7 @@ func CheckAccountExists(ctx context.Context, db database.DB, req model.CreateAcc
 			continue
 		}
 
-		val, ok := db.Get(ctx, key, "")
+		val, ok := db.Get(ctx, key, false)
 		if !ok {
 			continue
 		}
@@ -76,7 +76,7 @@ func ValidateCredentials(ctx context.Context, db database.DB, req model.CreateSe
 			continue
 		}
 
-		val, ok := db.Get(ctx, key, "")
+		val, ok := db.Get(ctx, key, false)
 		if !ok {
 			continue
 		}
@@ -118,7 +118,7 @@ func GetAccountBySessionID(ctx context.Context, db database.DB, sessionID uuid.U
 	span.GetLogger().Info("Getting account by session ID", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	sessionVal, ok := db.Get(ctx, sessionKey, "")
+	sessionVal, ok := db.Get(ctx, sessionKey, false)
 	if !ok {
 		return model.Account{}, fmt.Errorf("session not found")
 	}
@@ -129,7 +129,7 @@ func GetAccountBySessionID(ctx context.Context, db database.DB, sessionID uuid.U
 	}
 
 	accountKey := "account:" + session.AccountID.String()
-	accountVal, ok := db.Get(ctx, accountKey, "")
+	accountVal, ok := db.Get(ctx, accountKey, false)
 	if !ok {
 		return model.Account{}, fmt.Errorf("account not found")
 	}
@@ -147,7 +147,7 @@ func ValidateSession(ctx context.Context, db database.DB, sessionID uuid.UUID) e
 	span.GetLogger().Info("Validating session", "session_id", sessionID)
 
 	sessionKey := "session:" + sessionID.String()
-	sessionVal, ok := db.Get(ctx, sessionKey, "")
+	sessionVal, ok := db.Get(ctx, sessionKey, false)
 	if !ok {
 		return fmt.Errorf("session not found")
 	}
@@ -174,4 +174,44 @@ func DeleteSession(ctx context.Context, db database.DB, sessionID uuid.UUID) err
 	}
 
 	return nil
+}
+
+func GetAccounts(ctx context.Context, db database.DB) ([]model.Account, error) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Retrieving all accounts")
+
+	accountVals, ok := db.Get(ctx, "account:", true)
+	if !ok {
+		return nil, fmt.Errorf("account not found")
+	}
+
+	accounts := make([]model.Account, 0, len(accountVals))
+	for _, v := range accountVals {
+		var acc model.Account
+		if err := json.Unmarshal([]byte(v), &acc); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, acc)
+	}
+
+	return accounts, nil
+}
+
+func GetAccount(ctx context.Context, db database.DB, accountID string) (model.Account, error) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Retrieving all accounts")
+
+	key := fmt.Sprintf("account:%s", accountID)
+
+	accountVal, ok := db.Get(ctx, key, false)
+	if !ok {
+		return model.Account{}, fmt.Errorf("account not found")
+	}
+
+	var acc model.Account
+	if err := json.Unmarshal([]byte(accountVal[key]), &acc); err != nil {
+		return model.Account{}, err
+	}
+
+	return acc, nil
 }

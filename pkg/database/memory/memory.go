@@ -36,7 +36,7 @@ func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 	return nil
 }
 
-func (s *Store) Get(ctx context.Context, key string, prefix string) (map[string]string, bool) {
+func (s *Store) Get(ctx context.Context, key string, withPrefix bool) (map[string]string, bool) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Getting key from database", "key", key)
 
@@ -45,9 +45,9 @@ func (s *Store) Get(ctx context.Context, key string, prefix string) (map[string]
 
 	result := make(map[string]string, 0)
 
-	if prefix != "" {
+	if withPrefix {
 		for k, v := range s.data {
-			if strings.HasPrefix(k, prefix) {
+			if strings.HasPrefix(k, key) {
 				result[k] = v
 			}
 		}

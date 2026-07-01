@@ -72,7 +72,7 @@ func (s Snapshot) String() string {
 
 type DB interface {
 	Set(ctx context.Context, key string, value fmt.Stringer) error
-	Get(ctx context.Context, key string, prefix string) (map[string]string, bool)
+	Get(ctx context.Context, key string, withPrefix bool) (map[string]string, bool)
 	Delete(ctx context.Context, key string) error
 	Keys(ctx context.Context) []string
 	Close(ctx context.Context) error
