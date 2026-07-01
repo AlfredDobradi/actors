@@ -9,7 +9,6 @@ x-common-etcd: &etcd-svc
     - --initial-cluster-state=new
     - --log-level=warn
   restart: unless-stopped
-  networks: [etcd-net]
 
 services:
   etcd1:
