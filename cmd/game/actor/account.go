@@ -120,7 +120,9 @@ func (a *AccountActor) processTick(ctx context.Context, _ *system.Message) syste
 	ctxLogger := slog.With("span_id", spanID)
 	ctxLogger.Debug("Processing tick in account actor", "actor_id", a.GetID())
 
-	a.Tavern.ProcessTick(ctx)
+	if a.Tavern != nil {
+		a.Tavern.ProcessTick(ctx)
+	}
 	return nil
 }
 
@@ -146,19 +148,9 @@ func (a *AccountActor) replayTicks(ctx context.Context, since int64) error {
 		return err
 	}
 
-	for i := 0; i < ticksSinceTime; i++ {
-		var err error
-		for errCount := 1; errCount <= 5; errCount++ {
-			err = tempActor.processTick(ctx, &system.Message{})
-			if err == nil {
-				break
-			}
-			slog.Warn("Error processing tick during replay, retrying", "error", err, "tries", errCount, "actor_id", a.GetID())
-		}
-		if err != nil {
-			slog.Error("Failed to process tick during replay after multiple attempts", "error", err, "actor_id", a.GetID())
-			break
-		}
+	if errs := tempActor.Tavern.ReplayTicks(ctx, ticksSinceTime); errs != nil {
+		ctxLogger.Error("Failed to replay ticks in tavern during account actor replay", "error", err, "actor_id", a.GetID())
+		return err
 	}
 
 	if a.Gold == nil {

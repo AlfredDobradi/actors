@@ -20,11 +20,14 @@ type CharacterDetails struct {
 	Name       string    `json:"name"`
 	Level      int       `json:"level"`
 	Experience int       `json:"experience"`
+	Health     int       `json:"health"`
+	Energy     int       `json:"energy"`
+	Gold       int       `json:"gold"`
 	Progress   int       `json:"progress"`
 	Action     string    `json:"action"`
 }
 
-func DetailsFromCharacter(c *game.Character) CharacterDetails {
+func DetailsFromCharacter(c *game.Hero) CharacterDetails {
 	action := "is not currently doing anything"
 	if c.Action != nil {
 		action = c.Action.String()
@@ -35,6 +38,9 @@ func DetailsFromCharacter(c *game.Character) CharacterDetails {
 		Name:       c.Name,
 		Level:      c.Level,
 		Experience: c.Experience,
+		Health:     c.Health,
+		Energy:     c.Energy,
+		Gold:       c.Gold,
 		Progress:   c.Cooldown,
 		Action:     action,
 	}

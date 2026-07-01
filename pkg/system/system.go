@@ -467,7 +467,7 @@ func (s *System) Spawn(ctx context.Context, kind string, opts ...HandlerOpt) (*A
 	return handler, nil
 }
 
-func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params model.IDParam) (*ActorHandler, error) {
+func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params model.IDParam, opts ...HandlerOpt) (*ActorHandler, error) {
 	factory, exists := s.registry.factories[kind]
 	if !exists {
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
@@ -482,10 +482,8 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 		return s.registry.actors[actor.GetID()], nil
 	}
 
-	opts := []HandlerOpt{
-		WithSubscription(fmt.Sprintf("actor:%s", actor.GetID())),
-		WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())),
-	}
+	opts = append(opts, WithSubscription(fmt.Sprintf("actor:%s", actor.GetID())))
+	opts = append(opts, WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())))
 
 	handler := NewActorHandler(s, actor, opts...)
 	if err := handler.Restore(ctx, s.store); err != nil {
@@ -529,7 +527,7 @@ func (s *System) IsActorSpawned(ctx context.Context, actorID uuid.UUID) model.Ac
 
 	// lookup actor in the store
 	key := fmt.Sprintf("actor:%s:hostname", actorID)
-	if _, ok := s.store.Get(ctx, key); ok {
+	if _, ok := s.store.Get(ctx, key, false); ok {
 		return model.ActorStateRemote
 	}
 

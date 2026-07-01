@@ -21,7 +21,6 @@ import (
 // eventually this file will only contain a handful of end to end tests that covers the main happy paths like the flow from creating an account to retrieving character data
 
 const (
-	HOST     = "http://localhost:8080"
 	USERNAME = "testuser"
 	PASSWORD = "password123"
 	EMAIL    = "test@email.com"
@@ -144,7 +143,7 @@ func createTavern(t *testing.T, address, token string) (response, error) {
 func hireCharacter(t *testing.T, address, token string) (response, error) {
 	req, err := http.NewRequest(
 		http.MethodPost,
-		url(address, "/account/tavern/characters/hire"),
+		url(address, "/account/tavern/hire"),
 		nil,
 	)
 	require.NoError(t, err)
