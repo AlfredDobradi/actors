@@ -61,8 +61,6 @@ func NewServer(sys *system.System, db database.DB) *Server {
 	// admin.Use(middleware.Authorization(db))
 	admin.HandleFunc("/accounts", handler.HandleAdminGetAccounts(s.context)).Methods(http.MethodGet)
 	admin.HandleFunc("/accounts/{accountId}", handler.HandleAdminGetAccount(s.context)).Methods(http.MethodGet)
-	admin.HandleFunc("/sessions", handler.NotImplementedHandler(s.context)).Methods(http.MethodGet)
-	admin.HandleFunc("/sessions/{sessionId}", handler.NotImplementedHandler(s.context)).Methods(http.MethodGet)
 
 	a := router.PathPrefix("/account").Subrouter()
 	a.Use(middleware.Authorization(db))

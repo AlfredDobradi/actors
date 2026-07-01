@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account List</title>
+</head>
+<body>
+    <h2>Account details: {{ .Account.Username }}</h2>
+    <div>
+        <div>ID: <a href="/accounts/{{ .Account.ID }}" target="_blank">{{ .Account.ID }}</a></div>
+        <div>Username: {{ .Account.Username }}</div>
+        <div>Email: {{ .Account.Email }}</div>
+        <div>Created at: {{ .Account.CreatedAt }}</div>
+        <div>Updated at: {{ .Account.UpdatedAt }}</div>
+        <div>Active: {{ .Account.Active }}</div>
+    </div>
+
+    <h3>Sessions</h3>
+    {{ with .Sessions }}
+    <table>
+        <tr>
+            <td>ID</td>
+            <td>Created At</td>
+            <td>Updated At</td>
+            <td>Active</td>
+        </tr>
+
+        {{ range . }}
+        <tr>
+            <td><a href="/admin/sessions/{{ .ID }}" target="_blank">{{ .ID }}</a></td>
+            <td>{{ .CreatedAt }}</td>
+            <td>{{ .UpdatedAt }}</td>
+            <td>{{ .Active }}</td>
+        </tr>
+        {{ end }}
+    </table>
+    {{ else }}
+    <b>No sessions found for user</b>
+    {{ end }}
+</body>
+</html>

@@ -215,3 +215,26 @@ func GetAccount(ctx context.Context, db database.DB, accountID string) (model.Ac
 
 	return acc, nil
 }
+
+func GetSessionsByAccountID(ctx context.Context, db database.DB, accountID string) ([]model.Session, error) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Retrieving sessions for account", "account_id", accountID)
+
+	response := make([]model.Session, 0)
+
+	sessionsVal, ok := db.Get(ctx, "session:", true)
+	if !ok {
+		return response, nil
+	}
+
+	for _, sessionRaw := range sessionsVal {
+		var session model.Session
+		if err := json.Unmarshal([]byte(sessionRaw), &session); err != nil {
+			return make([]model.Session, 0), err
+		}
+
+		response = append(response, session)
+	}
+
+	return response, nil
+}
