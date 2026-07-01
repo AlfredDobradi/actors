@@ -1,5 +1,7 @@
 .PHONY: build run clean
 
+VERBOSE_FLAG := $(if $(VERBOSE),-v,)
+
 build:
 	go build -o bin/game ./cmd/game/main.go
 
@@ -13,4 +15,4 @@ lint:
 	golangci-lint run --config .golangci.yaml
 
 test:
-	go test -v ./...
+	go test $(VERBOSE_FLAG) ./...

@@ -26,7 +26,7 @@ func TestCreateAccount(t *testing.T) {
 	require.Equal(t, req.Email, resp.Email)
 
 	// Verify account is stored in the database
-	storedAccount, exists := db.Get(context.Background(), "account:"+resp.ID.String())
+	storedAccount, exists := db.Get(context.Background(), "account:"+resp.ID.String(), false)
 	require.True(t, exists)
 	require.NotNil(t, storedAccount)
 }

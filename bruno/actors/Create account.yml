@@ -1,0 +1,23 @@
+info:
+  name: Create account
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://127.0.0.1:8080/auth/account
+  body:
+    type: json
+    data: |-
+      {
+        "username": "brvy",
+        "password": "1234",
+        "email": "test@actors.dev"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

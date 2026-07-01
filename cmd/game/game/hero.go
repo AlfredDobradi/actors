@@ -139,6 +139,38 @@ func (t *Tavern) ProcessTick(ctx context.Context) {
 	wg.Wait()
 }
 
+func (t *Tavern) ReplayTicks(ctx context.Context, ticks int) []error {
+	wg := sync.WaitGroup{}
+	errors := make(chan error, len(t.characters))
+	for id, character := range t.characters {
+		wg.Add(1)
+		go func(id uuid.UUID, character *Hero) {
+			defer wg.Done()
+			slog.Debug("Replaying ticks for character", "characterID", character.ID, "characterName", character.Name, "ticks", ticks)
+			// There is currently no way of receiving an error from the hero.ProcessTick method, might change in the future.
+			if err := character.ReplayTicks(ctx, ticks); err != nil {
+				errors <- fmt.Errorf("error replaying ticks for character %s: %w", character.ID, err)
+				return
+			}
+
+			t.mx.Lock()
+			t.characters[id] = character
+			t.mx.Unlock()
+		}(id, character)
+	}
+	wg.Wait()
+
+	close(errors)
+	if len(errors) > 0 {
+		errs := make([]error, 0, len(errors))
+		for err := range errors {
+			errs = append(errs, err)
+		}
+		return errs
+	}
+	return nil
+}
+
 func GenerateRandomCharacter() Hero {
 	firstNames := []string{"Arin", "Bel", "Cal", "Dain", "Eli"}
 	lastNames := []string{"Strong", "Swift", "Brave", "Clever", "Bold"}
@@ -365,17 +397,6 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 	if c.Action == nil || c.Action.GetName() == ActionNameIdle {
 		c.Action = c.WhatNext()
 
-		if c.Action.GetName() == ActionNameGather && c.Action.(*GatherAction).Resource.Name == "" {
-			roll := rand.Intn(100) //nolint:gosec
-			if roll < 50 {
-				c.Action = &GatherAction{Resource: Wood}
-			} else if roll < 80 {
-				c.Action = &GatherAction{Resource: Stone}
-			} else {
-				c.Action = &GatherAction{Resource: Iron}
-			}
-		}
-
 		c.Cooldown = c.Action.GetCooldown()
 		return
 	}
@@ -389,6 +410,42 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 	c.Action.Execute(ctx, c)
 	c.Action = &IdleAction{}
 	c.Cooldown = 0
+}
+
+func (c *Hero) ReplayTicks(ctx context.Context, ticks int) error {
+	remainingTicks := ticks
+
+	slog.Debug("Starting to replay ticks", "characterID", c.ID, "characterName", c.Name, "ticksToReplay", ticks)
+
+	actions := make([]string, 0)
+	if c.Action != nil {
+		actions = append(actions, c.Action.GetName())
+	}
+
+	for remainingTicks > 0 {
+		slog.Debug("replaying ticks", "remaining", remainingTicks)
+		if c.Cooldown > 0 && c.Action != nil {
+			slog.Debug("cooldown is greater than 0 and there is an action", "cooldown", c.Cooldown, "action", c.Action.GetName())
+			newRemainingTicks := max(0, remainingTicks-c.Cooldown)
+			c.Cooldown -= remainingTicks - newRemainingTicks
+			remainingTicks = newRemainingTicks
+			slog.Debug("after processing cooldown", "remaining", remainingTicks, "cooldown", c.Cooldown)
+		} else {
+			if c.Action != nil {
+				slog.Debug("cooldown expired and there is an action to execute", "action", c.Action.GetName())
+				c.Action.Execute(ctx, c)
+				remainingTicks--
+				slog.Debug("after executing action", "remaining", remainingTicks)
+			}
+			c.Action = c.WhatNext()
+			c.Cooldown = c.Action.GetCooldown()
+			actions = append(actions, c.Action.GetName())
+		}
+	}
+
+	slog.Debug("Finished replaying ticks", "characterID", c.ID, "characterName", c.Name, "ticksReplayed", ticks, "actions", actions)
+
+	return nil
 }
 
 func (c *Hero) StartAction(ctx context.Context, action Action) {

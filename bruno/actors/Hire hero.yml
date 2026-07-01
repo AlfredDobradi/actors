@@ -1,0 +1,23 @@
+info:
+  name: Hire hero
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://127.0.0.1:8080/account/tavern/hire
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Alice"
+      }
+  auth:
+    type: bearer
+    token: v4.local.zsb-ZDCRNt58aN8ctdJ-hjTlVdJaNc2tOoB7etGwUTt1N6PWX1GTkxnkWnrUPwOnBC1n5sykoa_rOnpPpKdvTT4wL_NTPEagZai37HWnPkWJdJFKT52gP2b48bqLfAMjD9JfAHKo1Np6F8meXxv2BDzxe-GdRO_O0SYZh2Mm_g7_9mSWbEgwIlSFiVIAhMqqpX376yQDTHvxiIA3pmErFJc8ZQtvGLXT0W4P9So4myVJPv-T2JsP0dyRUpt7mkGQOjL2PMSbS7vB3854xy39xZYw6gRlt46yHaar2zSOFRL704DquahMAeX-spAK3lP_2bd-wi4yhzpKOKLmXLmIB50JqZSgsIZhzz9QLS50vHJBikRuMd8Xx4Ln
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
