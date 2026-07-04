@@ -13,7 +13,7 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/api"
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/config"
-	"github.com/alfreddobradi/actors/pkg/database/memory"
+	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +41,7 @@ func startSuite() (string, chan struct{}) {
 	registry := system.NewRegistry()
 	actor.InitFactories(registry)
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	var port int32
 	for {
@@ -55,7 +55,7 @@ func startSuite() (string, chan struct{}) {
 	address := fmt.Sprintf("localhost:%d", port)
 
 	config.GetConfig().Addr = address
-	s := api.NewServer(sys, db)
+	s := api.NewServer(sys, db, nil)
 
 	stop := make(chan struct{})
 	ctx := context.Background()

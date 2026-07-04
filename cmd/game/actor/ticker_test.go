@@ -7,7 +7,7 @@ import (
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/pkg/database"
-	"github.com/alfreddobradi/actors/pkg/database/memory"
+	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	pkgmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/testhelper"
@@ -272,7 +272,7 @@ func TestTickerActorFactory(t *testing.T) {
 
 	ctxWithSender := context.WithValue(ctx, pkgmodel.ContextKeySenderFn, mockSendFunc)
 
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	// Spawn ticker actor
 	actorHandler, err := sys.Spawn(ctxWithSender, "TickerActor")
@@ -307,7 +307,7 @@ func TestTickerActorFactoryInitialization(t *testing.T) {
 
 	ctxWithSender := context.WithValue(ctx, pkgmodel.ContextKeySenderFn, mockSendFunc)
 
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	actorHandler, err := sys.Spawn(ctxWithSender, "TickerActor")
 	require.NoError(t, err)

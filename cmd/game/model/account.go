@@ -22,13 +22,13 @@ type CreateAccountResponse struct {
 }
 
 type Account struct {
-	ID        uuid.UUID `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	Password  string    `json:"password"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Active    bool      `json:"active"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	Username  string    `json:"username" db:"username"`
+	Email     string    `json:"email" db:"email"`
+	Password  string    `json:"password" db:"password"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	Active    bool      `json:"active" db:"active"`
 }
 
 func (a Account) String() string {
@@ -52,11 +52,11 @@ type CreateSessionResponse struct {
 }
 
 type Session struct {
-	ID        uuid.UUID `json:"id"`
-	AccountID uuid.UUID `json:"account_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Active    bool      `json:"active"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	AccountID uuid.UUID `json:"account_id" db:"account_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	Active    bool      `json:"active" db:"active"`
 }
 
 func (s Session) String() string {

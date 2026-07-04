@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
@@ -28,10 +27,9 @@ type routeHandler func(ctx context.Context, msg *system.Message) system.HandleEr
 type AccountActor struct {
 	mx *sync.Mutex
 
-	ID     uuid.UUID
-	Name   string
-	Tavern *game.Tavern
-	Gold   *atomic.Int64
+	ID    uuid.UUID
+	Name  string
+	Guild *game.Guild
 }
 
 func (a *AccountActor) GetID() uuid.UUID {
@@ -91,12 +89,7 @@ func (a *AccountActor) restore(ctx context.Context, snapshot database.Snapshot) 
 
 	a.ID = aux.ID
 	a.Name = aux.Name
-	a.Tavern = aux.Tavern
-	if aux.Gold == nil {
-		a.Gold = &atomic.Int64{}
-	} else {
-		a.Gold = aux.Gold
-	}
+	a.Guild = aux.Guild
 
 	return nil
 }
@@ -107,6 +100,15 @@ func (a *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 	}
 
 	return a.replayTicks(ctx, snapshot.Timestamp)
+}
+
+func (h *AccountActor) Persist(ctx context.Context) error {
+	return nil
+}
+
+func (h *AccountActor) Restore(ctx context.Context) error {
+	// noop
+	return nil
 }
 
 func (a *AccountActor) Start(ctx context.Context) {
@@ -124,8 +126,8 @@ func (a *AccountActor) processTick(ctx context.Context, _ *system.Message) syste
 	ctxLogger := slog.With("span_id", spanID)
 	ctxLogger.Debug("Processing tick in account actor", "actor_id", a.GetID())
 
-	if a.Tavern != nil {
-		a.Tavern.ProcessTick(ctx)
+	if a.Guild != nil {
+		a.Guild.ProcessTick(ctx)
 	}
 	return nil
 }
@@ -152,17 +154,17 @@ func (a *AccountActor) replayTicks(ctx context.Context, since int64) error {
 		return restoreErr
 	}
 
-	if errs := tempActor.Tavern.ReplayTicks(ctx, ticksSinceTime); errs != nil {
-		ctxLogger.Error("Failed to replay ticks in tavern during account actor replay", "error", err, "actor_id", a.GetID())
-		return err
+	if tempActor.Guild != nil {
+		if errs := tempActor.Guild.ReplayTicks(ctx, ticksSinceTime); errs != nil {
+			ctxLogger.Error("Failed to replay ticks in tavern during account actor replay", "error", err, "actor_id", a.GetID())
+			return err
+		}
+	} else {
+		slog.Warn("no tavern so we're not replaying ticks")
 	}
 
-	if a.Gold == nil {
-		a.Gold = &atomic.Int64{}
-	}
 	// if we replayed in the temporary actor we copy the relevant state
-	a.Gold.Store(tempActor.Gold.Load())
-	a.Tavern = tempActor.Tavern
+	a.Guild = tempActor.Guild
 
 	ctxLogger.Debug("Finished replaying ticks in account actor", "actor_id", a.GetID(), "ticks_replayed", ticksSinceTime)
 	return nil
@@ -179,7 +181,7 @@ func (a *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 
 	slog.Info("Creating tavern", "actor_id", a.GetID(), "message_id", msg.GetID(), "tavern_name", request.Name)
 
-	if a.Tavern != nil {
+	if a.Guild != nil {
 		return ErrTavernExists{}
 	}
 
@@ -191,10 +193,10 @@ func (a *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 	}
 
 	a.mx.Lock()
-	a.Tavern = game.NewTavern(request.Name)
+	a.Guild = game.NewGuild(request.Name)
 	a.mx.Unlock()
 
-	if err := msg.Respond(a.ID, model.NewTavernResponse{Name: a.Tavern.Name(), OK: true}); err != nil {
+	if err := msg.Respond(a.ID, model.NewTavernResponse{Name: a.Guild.Name(), OK: true}); err != nil {
 		slog.Error("Failed to send tavern creation response", "error", err, "actor_id", a.GetID(), "message_id", msg.GetID())
 		return NewErrResponseFailed(err)
 	}
@@ -203,7 +205,7 @@ func (a *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 }
 
 func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) system.HandleError {
-	if a.Tavern == nil {
+	if a.Guild == nil {
 		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: "tavern not found for account"}); err != nil {
 			slog.Error("failed to send response", "error", err)
 		}
@@ -214,20 +216,21 @@ func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) s
 	slog.Info("Received request to hire character", "actor_id", a.GetID(), "message_id", msg.GetID())
 
 	// check whether account has enough gold
-	cost := game.HeroPriceMultiplier(len(a.Tavern.Characters())) * 1000
+	cost := game.HeroPriceMultiplier(len(a.Guild.Characters())) * 1000
+	gold := a.Guild.Gold.Load()
 
-	if cost > a.Gold.Load() {
-		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", a.Gold.Load(), cost)}); err != nil {
+	if cost > gold {
+		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", gold, cost)}); err != nil {
 			slog.Error("failed to send response", "error", err)
 		}
-		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %d, need %d", a.Gold.Load(), cost))
+		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %d, need %d", gold, cost))
 	} else {
-		a.Gold.Add(-cost)
+		a.Guild.Gold.Add(-cost)
 	}
 
 	character := game.GenerateRandomCharacter()
 
-	a.Tavern.AddCharacter(&character)
+	a.Guild.AddCharacter(&character)
 
 	slog.Info("Hired new character", "actor_id", a.GetID(), "character_id", character.ID, "character_name", character.Name)
 
@@ -246,7 +249,7 @@ func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) s
 }
 
 func (a *AccountActor) getCharacter(ctx context.Context, msg *system.Message) system.HandleError {
-	if a.Tavern == nil {
+	if a.Guild == nil {
 		return NewAccountError(fmt.Errorf("tavern not found for account"))
 	}
 
@@ -262,7 +265,7 @@ func (a *AccountActor) getCharacter(ctx context.Context, msg *system.Message) sy
 
 	slog.Info("Received request to get character", "actor_id", a.GetID(), "message_id", msg.GetID(), "character_id", id)
 
-	character, exists := a.Tavern.GetCharacter(id)
+	character, exists := a.Guild.GetCharacter(id)
 	if !exists {
 		return NewAccountError(fmt.Errorf("character with ID %s not found", id))
 	}
@@ -283,13 +286,13 @@ func (a *AccountActor) getCharacter(ctx context.Context, msg *system.Message) sy
 }
 
 func (a *AccountActor) getCharacters(ctx context.Context, msg *system.Message) system.HandleError {
-	if a.Tavern == nil {
+	if a.Guild == nil {
 		return NewAccountError(fmt.Errorf("tavern not found for account"))
 	}
 
 	slog.Info("Received request to get characters", "actor_id", a.GetID(), "message_id", msg.GetID())
 
-	characters := a.Tavern.Characters()
+	characters := a.Guild.Characters()
 	if len(characters) == 0 {
 		return NewAccountError(fmt.Errorf("no characters found"))
 	}
@@ -337,31 +340,21 @@ func accountActorFactory(ctx context.Context) system.Actor {
 		accountParams.ID = uuid.New()
 	}
 
-	startingMoney := &atomic.Int64{}
-	startingMoney.Store(3000)
-
 	a := &AccountActor{
-		mx:     &sync.Mutex{},
-		ID:     accountParams.ID,
-		Name:   accountParams.Name,
-		Tavern: nil,
-		Gold:   startingMoney,
+		mx:    &sync.Mutex{},
+		ID:    accountParams.ID,
+		Name:  accountParams.Name,
+		Guild: nil,
 	}
 
 	return a
 }
 
 func (a *AccountActor) MarshalJSON() ([]byte, error) {
-	gold := int64(0)
-	if a.Gold != nil {
-		gold = a.Gold.Load()
-	}
-
 	raw := map[string]any{
 		"id":     a.ID,
 		"name":   a.Name,
-		"gold":   gold,
-		"tavern": a.Tavern,
+		"tavern": a.Guild,
 	}
 
 	return json.Marshal(raw)
@@ -369,10 +362,10 @@ func (a *AccountActor) MarshalJSON() ([]byte, error) {
 
 func (a *AccountActor) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ID     uuid.UUID    `json:"id"`
-		Name   string       `json:"name"`
-		Gold   int64        `json:"gold"`
-		Tavern *game.Tavern `json:"tavern"`
+		ID     uuid.UUID   `json:"id"`
+		Name   string      `json:"name"`
+		Gold   int64       `json:"gold"`
+		Tavern *game.Guild `json:"tavern"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -380,10 +373,7 @@ func (a *AccountActor) UnmarshalJSON(data []byte) error {
 
 	a.ID = aux.ID
 	a.Name = aux.Name
-	a.Tavern = aux.Tavern
-
-	a.Gold = &atomic.Int64{}
-	a.Gold.Store(aux.Gold)
+	a.Guild = aux.Tavern
 
 	return nil
 }

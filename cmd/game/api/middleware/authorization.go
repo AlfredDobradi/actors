@@ -8,10 +8,10 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/cmd/game/paseto"
 	"github.com/alfreddobradi/actors/cmd/game/repository"
-	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 )
 
-func Authorization(db database.DB) func(http.Handler) http.Handler {
+func Authorization(db *postgres.Connection) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sessionID, err := paseto.ValidateSessionTokenFromRequest(r.Context(), r)

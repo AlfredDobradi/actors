@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/alfreddobradi/actors/pkg/database/memory"
+	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ func TestRegistrySpawn(t *testing.T) {
 	})
 
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	ctx := context.Background()
 	handler, err := sys.Spawn(ctx, "testActor")

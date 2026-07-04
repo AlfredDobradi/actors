@@ -19,6 +19,17 @@ services:
       ETCD_NAME: etcd1
       ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd1:2380
       ETCD_ADVERTISE_CLIENT_URLS: http://etcd1:2379
+  
+  postgres:
+    image: postgres:15.18
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_PASSWORD: testing
+      POSTGRES_HOST_AUTH_METHOD: password
+      POSTGRES_USER: postgres
+    volumes:
+      - "./pg_init:/docker-entrypoint-initdb.d"
 
   # etcd2:
   #   <<: *etcd-svc

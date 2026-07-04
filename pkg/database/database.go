@@ -70,7 +70,7 @@ func (s Snapshot) String() string {
 	return string(encoded)
 }
 
-type DB interface {
+type KeyValue interface {
 	Set(ctx context.Context, key string, value fmt.Stringer) error
 	Get(ctx context.Context, key string, withPrefix bool) (map[string]string, bool)
 	Delete(ctx context.Context, key string) error

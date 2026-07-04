@@ -26,6 +26,7 @@ func HandleCreateAccount(s *state.Context) func(w http.ResponseWriter, r *http.R
 		defer closeBody(r.Body)
 
 		if err := repository.CheckAccountExists(span.Context(), s.DB, httpReq); err != nil {
+			slog.Error("account already exists", "error", err.Error())
 			http.Error(w, "Account already exists", http.StatusConflict)
 			return
 		}

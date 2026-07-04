@@ -61,11 +61,10 @@ func debugChanceTable(table []chanceEntry) string {
 
 	b := strings.Builder{}
 	for i, entry := range table {
-		b.WriteString(
-			strings.TrimSpace(
-				fmt.Sprintf("%s: %d", entry.action.GetName(), steps[i]),
-			) + ", ",
-		)
+		b.WriteString(strings.TrimSpace(
+			fmt.Sprintf("%s: %d", entry.action.GetName(), steps[i]),
+		))
+		b.WriteString(", ")
 	}
 
 	return b.String()

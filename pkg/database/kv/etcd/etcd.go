@@ -155,7 +155,7 @@ func (s *Store) Restore(ctx context.Context, key string) (database.Snapshot, err
 }
 
 func init() {
-	var _ database.DB = (*Store)(nil)
+	var _ database.KeyValue = (*Store)(nil)
 }
 
 func (s *Store) StartSession(ctx context.Context) error {

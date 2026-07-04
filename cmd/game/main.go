@@ -12,7 +12,8 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/logging"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
-	"github.com/alfreddobradi/actors/pkg/database/etcd"
+	"github.com/alfreddobradi/actors/pkg/database/kv/etcd"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/joho/godotenv"
 )
@@ -33,10 +34,19 @@ func main() {
 	actor.InitFactories(registry)
 
 	var (
-		db    database.DB
+		kv    database.KeyValue
+		kvErr error
+	)
+	if kv, kvErr = etcd.New([]string{"localhost:22379", "localhost:22479", "localhost:22579"}); kvErr != nil {
+		slog.Error("Failed to initialize key-value store", "error", kvErr)
+		os.Exit(1)
+	}
+
+	var (
+		db    *postgres.Connection
 		dbErr error
 	)
-	if db, dbErr = etcd.New([]string{"localhost:22379", "localhost:22479", "localhost:22579"}); dbErr != nil {
+	if db, dbErr = postgres.New(); dbErr != nil {
 		slog.Error("Failed to initialize database", "error", dbErr)
 		os.Exit(1)
 	}
@@ -44,13 +54,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sys, err := system.NewSystem(registry, db)
+	sys, err := system.NewSystem(registry, db, kv)
 	if err != nil {
 		slog.Error("Failed to create system", "error", err)
 		os.Exit(1)
 	}
 
-	apiServer := api.NewServer(sys, db)
+	apiServer := api.NewServer(sys, kv, db)
 
 	go apiServer.Start() //nolint
 
@@ -69,5 +79,5 @@ func main() {
 
 	logging.LogError(apiServer.Shutdown(ctx), "Failed to shutdown API server")
 	logging.LogError(sys.Shutdown(ctx), "Failed to shutdown system")
-	logging.LogError(db.Close(ctx), "Failed to close database")
+	logging.LogError(kv.Close(ctx), "Failed to close database")
 }

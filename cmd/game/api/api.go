@@ -12,6 +12,7 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/api/state"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/gorilla/mux"
 )
@@ -23,7 +24,7 @@ type Server struct {
 	listener net.Listener
 }
 
-func NewServer(sys *system.System, db database.DB) *Server {
+func NewServer(sys *system.System, kv database.KeyValue, db *postgres.Connection) *Server {
 	router := mux.NewRouter()
 
 	listener, err := net.Listen("tcp", config.GetConfig().Addr)
@@ -32,7 +33,7 @@ func NewServer(sys *system.System, db database.DB) *Server {
 		return nil
 	}
 
-	stateCtx := state.New(db, sys)
+	stateCtx := state.New(kv, db, sys)
 
 	s := &Server{
 		Server: &http.Server{

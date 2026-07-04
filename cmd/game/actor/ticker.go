@@ -51,6 +51,16 @@ func (h *TickerActor) RestoreFromSnapshot(ctx context.Context, snapshot database
 	return nil
 }
 
+func (h *TickerActor) Persist(ctx context.Context) error {
+	// noop
+	return nil
+}
+
+func (h *TickerActor) Restore(ctx context.Context) error {
+	// noop
+	return nil
+}
+
 func (h *TickerActor) tickCallback(ctx context.Context) error {
 	spanID := uuid.New()
 	sctx := context.WithValue(ctx, model.ContextKeySpanID, spanID)
