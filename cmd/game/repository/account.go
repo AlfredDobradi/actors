@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alfreddobradi/actors/cmd/game/actor"
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/database"
@@ -420,7 +419,7 @@ func GetSessionsByAccountID(ctx context.Context, db *postgres.Connection, accoun
 	return sessions, nil
 }
 
-func PersistAccountData(ctx context.Context, db *postgres.Connection, account actor.AccountActor) error {
+func PersistAccountActor(ctx context.Context, db *postgres.Connection, account model.AccountActor) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Persisting account data", "account_id", account.ID)
 
@@ -474,8 +473,9 @@ func persistGuildData(ctx context.Context, tx *sqlx.Tx, accountID uuid.UUID, gui
 			return err
 		}
 
-		if _, err := tx.Exec("INSERT INTO heroes (id, name, level, experience, status, cooldown, health, energy, gold, action) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET level = $3, experience = $4, status = $5, cooldown = $6, health = $7, energy = $8, gold = $9, action = $10",
+		if _, err := tx.Exec("INSERT INTO heroes (id, guild_id, name, level, experience, status, cooldown, health, energy, gold, action) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO UPDATE SET level = $4, experience = $5, status = $6, cooldown = $7, health = $8, energy = $9, gold = $10, action = $11",
 			hero.ID,
+			guild.ID(),
 			hero.Name,
 			hero.Level,
 			hero.Experience,

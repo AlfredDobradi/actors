@@ -12,6 +12,7 @@ import (
 
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -39,8 +40,9 @@ func (a *MockBusActor) Snapshot(ctx context.Context) (database.Snapshot, error) 
 func (a *MockBusActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	return nil
 }
-func (a *MockBusActor) Persist(ctx context.Context) error { return nil }
-func (a *MockBusActor) Restore(ctx context.Context) error { return nil }
+func (m *MockBusActor) Persist(ctx context.Context, db *postgres.Connection) error {
+	return nil
+}
 func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	a.mx.Lock()
 	slog.Debug("MockBusActor handling message", "actorID", a.GetID(), "messageID", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))

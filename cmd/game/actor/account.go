@@ -11,7 +11,9 @@ import (
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
@@ -102,13 +104,16 @@ func (a *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 	return a.replayTicks(ctx, snapshot.Timestamp)
 }
 
-func (h *AccountActor) Persist(ctx context.Context) error {
-	return nil
-}
+func (a *AccountActor) Persist(ctx context.Context, db *postgres.Connection) error {
+	a.mx.Lock()
+	actorData := model.AccountActor{
+		ID:    a.ID,
+		Name:  a.Name,
+		Guild: a.Guild,
+	}
+	a.mx.Unlock()
 
-func (h *AccountActor) Restore(ctx context.Context) error {
-	// noop
-	return nil
+	return repository.PersistAccountActor(ctx, db, actorData)
 }
 
 func (a *AccountActor) Start(ctx context.Context) {

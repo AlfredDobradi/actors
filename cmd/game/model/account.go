@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/google/uuid"
 )
 
@@ -84,4 +85,10 @@ type AccountActorParams struct {
 
 func (p AccountActorParams) GetID() uuid.UUID {
 	return p.ID
+}
+
+type AccountActor struct {
+	ID    uuid.UUID
+	Name  string
+	Guild *game.Guild
 }

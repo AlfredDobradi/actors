@@ -11,6 +11,7 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/testhelper"
 	"github.com/google/uuid"
@@ -443,4 +444,40 @@ func TestAccountHireCharacter(t *testing.T) {
 		}
 		t.Run(tt.label, tf)
 	}
+}
+
+func TestAccountExists(t *testing.T) {
+	db, err := postgres.New()
+	require.NoError(t, err)
+
+	accountID := uuid.MustParse("990014fe-b4d2-49f0-afa7-3118799ec3d4")
+	guild := game.NewGuild("test")
+	hero := game.NewHero("Test Hero")
+
+	actor := AccountActor{
+		mx: &sync.Mutex{},
+
+		ID:    accountID,
+		Name:  "test",
+		Guild: guild,
+	}
+
+	err = actor.Persist(context.Background(), db)
+	require.NoError(t, err)
+
+	actor.Guild.Gold.Add(1000)
+	actor.Guild.AddCharacter(&hero)
+
+	for {
+		if len(hero.Inventory.Resources()) > 0 {
+			break
+		}
+
+		actor.Guild.ProcessTick(context.Background())
+	}
+
+	err = actor.Persist(context.Background(), db)
+	require.NoError(t, err)
+
+	// spew.Dump(accounts)
 }

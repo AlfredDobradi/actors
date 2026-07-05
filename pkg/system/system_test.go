@@ -8,6 +8,7 @@ import (
 
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -65,8 +66,9 @@ func (m *MockActor) RestoreFromSnapshot(ctx context.Context, snapshot database.S
 	return nil
 }
 
-func (a *MockActor) Persist(ctx context.Context) error { return nil }
-func (a *MockActor) Restore(ctx context.Context) error { return nil }
+func (m *MockActor) Persist(ctx context.Context, db *postgres.Connection) error {
+	return nil
+}
 
 func (m *MockActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	m.mu.Lock()

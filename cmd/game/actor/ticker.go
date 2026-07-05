@@ -7,6 +7,7 @@ import (
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/pkg/database"
+	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
@@ -51,13 +52,7 @@ func (h *TickerActor) RestoreFromSnapshot(ctx context.Context, snapshot database
 	return nil
 }
 
-func (h *TickerActor) Persist(ctx context.Context) error {
-	// noop
-	return nil
-}
-
-func (h *TickerActor) Restore(ctx context.Context) error {
-	// noop
+func (m *TickerActor) Persist(ctx context.Context, db *postgres.Connection) error {
 	return nil
 }
 

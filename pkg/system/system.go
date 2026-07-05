@@ -39,6 +39,8 @@ type Actor interface {
 
 	Snapshot(context.Context) (database.Snapshot, error)
 	RestoreFromSnapshot(context.Context, database.Snapshot) error
+
+	Persist(context.Context, *postgres.Connection) error
 }
 
 type Replayer interface {
@@ -66,6 +68,8 @@ type ActorHandler struct {
 	poisoned atomic.Bool
 
 	persister Persister
+
+	db *postgres.Connection
 
 	preStartHooks   *HookCollection
 	postStartHooks  *HookCollection
@@ -126,7 +130,15 @@ func (h *ActorHandler) Stop() {
 	close(h.stop)
 }
 
-func (h *ActorHandler) Persist(ctx context.Context, db Persister) error {
+func (h *ActorHandler) Persist(ctx context.Context) error {
+	if h.db == nil {
+		return fmt.Errorf("no database handler initialized")
+	}
+
+	return h.actor.Persist(ctx, h.db)
+}
+
+func (h *ActorHandler) Persist_(ctx context.Context, db Persister) error {
 	if db == nil {
 		return fmt.Errorf("no database provided for persistence")
 	}
@@ -174,7 +186,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 	defer close(h.done)
 	defer func() {
 		persistTimer.Stop()
-		if err := h.Persist(ctx, h.persister); err != nil {
+		if err := h.Persist(ctx); err != nil {
 			slog.Warn("Failed to persist actor state on shutdown", "actor_id", h.actor.GetID(), "error", err)
 		}
 
@@ -212,7 +224,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			}
 		case <-persistTimer.C:
 			slog.Debug("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())
-			if err := h.Persist(ctx, h.persister); err != nil {
+			if err := h.Persist(ctx); err != nil {
 				slog.Warn("Failed to persist actor state", "actor_id", h.actor.GetID(), "error", err)
 			}
 		case <-h.stop:

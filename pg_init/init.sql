@@ -30,6 +30,7 @@ CREATE TABLE guilds (
 CREATE TABLE heroes (
     id UUID NOT NULL,
     name VARCHAR(200) NOT NULL,
+    guild_id UUID NOT NULL,
     level INT,
     cooldown INT,
     health INT,
@@ -40,11 +41,6 @@ CREATE TABLE heroes (
     action JSON,
 
     UNIQUE (id)
-);
-
-CREATE TABLE guild_heroes (
-    guild_id UUID NOT NULL,
-    hero_id UUID NOT NULL
 );
 
 CREATE TABLE hero_resources (
