@@ -43,6 +43,9 @@ func (a *MockBusActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 func (m *MockBusActor) Persist(ctx context.Context, db *postgres.Connection) error {
 	return nil
 }
+func (m *MockBusActor) Restore(ctx context.Context, db *postgres.Connection) error {
+	return nil
+}
 func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	a.mx.Lock()
 	slog.Debug("MockBusActor handling message", "actorID", a.GetID(), "messageID", msg.GetID(), "payload", fmt.Sprintf("%v", msg.GetBody()))

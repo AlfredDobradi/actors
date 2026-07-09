@@ -56,6 +56,10 @@ func (m *TickerActor) Persist(ctx context.Context, db *postgres.Connection) erro
 	return nil
 }
 
+func (m *TickerActor) Restore(ctx context.Context, db *postgres.Connection) error {
+	return nil
+}
+
 func (h *TickerActor) tickCallback(ctx context.Context) error {
 	spanID := uuid.New()
 	sctx := context.WithValue(ctx, model.ContextKeySpanID, spanID)

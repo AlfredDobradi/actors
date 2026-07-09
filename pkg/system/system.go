@@ -41,6 +41,7 @@ type Actor interface {
 	RestoreFromSnapshot(context.Context, database.Snapshot) error
 
 	Persist(context.Context, *postgres.Connection) error
+	Restore(context.Context, *postgres.Connection) error
 }
 
 type Replayer interface {
@@ -90,6 +91,7 @@ func NewActorHandler(sys *System, actor Actor, opts ...HandlerOpt) *ActorHandler
 		publisher:     sys,
 
 		persister: sys.kv,
+		db:        sys.store,
 
 		preStartHooks:   NewHookCollection(HookPreStart),
 		postStartHooks:  NewHookCollection(HookPostStart),
@@ -160,22 +162,12 @@ func (h *ActorHandler) Persist_(ctx context.Context, db Persister) error {
 	return nil
 }
 
-func (h *ActorHandler) Restore(ctx context.Context, db Restorer) error {
-	if db == nil {
+func (h *ActorHandler) Restore(ctx context.Context) error {
+	if h.db == nil {
 		return fmt.Errorf("no database provided for restoration")
 	}
 
-	key := database.SnapshotKey(h.GetKind(), h.GetID())
-	snapshot, err := db.Restore(ctx, key)
-	if err != nil {
-		return fmt.Errorf("no data found in database for key %s: %w", key, err)
-	}
-
-	if err := h.actor.RestoreFromSnapshot(ctx, snapshot); err != nil {
-		return fmt.Errorf("failed to restore actor from snapshot: %w", err)
-	}
-
-	return nil
+	return h.actor.Restore(ctx, h.db)
 }
 
 func (h *ActorHandler) Start(ctx context.Context) {
@@ -501,7 +493,7 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 	opts = append(opts, WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())))
 
 	handler := NewActorHandler(s, actor, opts...)
-	if err := handler.Restore(ctx, s.kv); err != nil {
+	if err := handler.Restore(ctx); err != nil {
 		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, params.GetID(), err)
 	}
 

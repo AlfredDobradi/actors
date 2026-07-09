@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math/rand"
+	"strings"
 
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 )
@@ -43,7 +44,7 @@ var (
 )
 
 func ResourceByName(name string) (Resource, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "wood":
 		return Wood, true
 	case "stone":

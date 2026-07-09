@@ -70,6 +70,10 @@ func (m *MockActor) Persist(ctx context.Context, db *postgres.Connection) error 
 	return nil
 }
 
+func (m *MockActor) Restore(ctx context.Context, db *postgres.Connection) error {
+	return nil
+}
+
 func (m *MockActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	m.mu.Lock()
 	m.messageCount++

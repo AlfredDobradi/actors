@@ -10,6 +10,7 @@ import (
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
@@ -45,7 +46,7 @@ func TestNewAccountHasNoTavern(t *testing.T) {
 	require.NotNil(t, actorHandler)
 
 	actor := actorHandler.GetActor().(*AccountActor)
-	require.Equal(t, accountName, actor.Name)
+	require.Equal(t, accountName, actor.Username)
 	require.Nil(t, actor.Guild)
 }
 
@@ -107,7 +108,7 @@ func TestAccountActorFactory(t *testing.T) {
 			require.NotNil(t, actorHandler)
 
 			actor := actorHandler.GetActor().(*AccountActor)
-			require.Equal(t, tt.expectedName, actor.Name)
+			require.Equal(t, tt.expectedName, actor.Username)
 			require.True(t, tt.testID(actor.ID))
 		}
 		t.Run(tt.label, tf)
@@ -139,7 +140,7 @@ func TestActorPersistence(t *testing.T) {
 
 	actor := actorHandler.GetActor().(*AccountActor)
 	actor.Guild = game.NewGuild("PersistentTavern")
-	actor.Guild.AddCharacter(character)
+	actor.Guild.AddHero(character)
 
 	snapshot, err := actorHandler.GetActor().Snapshot(ctx)
 	require.NoError(t, err)
@@ -148,7 +149,7 @@ func TestActorPersistence(t *testing.T) {
 	err = restoredAccount.RestoreFromSnapshot(ctx, snapshot)
 
 	require.NoError(t, err)
-	require.Equal(t, "PersistentAccount", restoredAccount.Name)
+	require.Equal(t, "PersistentAccount", restoredAccount.Username)
 	require.NotNil(t, restoredAccount.Guild)
 
 	gold := restoredAccount.Guild.Gold.Load()
@@ -202,7 +203,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 			label: "Account with Tavern and Hero with an Action",
 			guild: func() *game.Guild {
 				t := game.NewGuild("TestTavern")
-				t.AddCharacter(testHeroWithAction)
+				t.AddHero(testHeroWithAction)
 				return t
 			}(),
 			hero: testHeroWithAction,
@@ -214,7 +215,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 			label: "Account with Tavern and Hero with no Action",
 			guild: func() *game.Guild {
 				t := game.NewGuild("TestTavern")
-				t.AddCharacter(testHeroNoAction)
+				t.AddHero(testHeroNoAction)
 				return t
 			}(),
 			hero: testHeroNoAction,
@@ -241,9 +242,9 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 			}
 
 			account := &AccountActor{
-				ID:    uuid.New(),
-				Name:  accountName,
-				Guild: tg,
+				ID:       uuid.New(),
+				Username: accountName,
+				Guild:    tg,
 			}
 
 			buf := bytes.NewBufferString("")
@@ -257,7 +258,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, account.ID, unmarshaledAccount.ID)
-			require.Equal(t, account.Name, unmarshaledAccount.Name)
+			require.Equal(t, account.Username, unmarshaledAccount.Username)
 
 			if len(tt.expectedChars) > 0 {
 				char, exists := unmarshaledAccount.Guild.GetCharacter(tt.hero.ID)
@@ -290,9 +291,9 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 
 func TestAccountUnmarshalJSON(t *testing.T) {
 	account := &AccountActor{
-		ID:    uuid.New(),
-		Name:  accountName,
-		Guild: game.NewGuild("TestTavern"),
+		ID:       uuid.New(),
+		Username: accountName,
+		Guild:    game.NewGuild("TestTavern"),
 	}
 
 	inventory := game.NewInventory()
@@ -311,7 +312,7 @@ func TestAccountUnmarshalJSON(t *testing.T) {
 		Inventory: inventory,
 	}
 
-	account.Guild.AddCharacter(character)
+	account.Guild.AddHero(character)
 
 	buf := bytes.NewBufferString("")
 	encoder := json.NewEncoder(buf)
@@ -325,7 +326,7 @@ func TestAccountUnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, account.ID, unmarshaledAccount.ID)
-	require.Equal(t, account.Name, unmarshaledAccount.Name)
+	require.Equal(t, account.Username, unmarshaledAccount.Username)
 
 	char, exists := unmarshaledAccount.Guild.GetCharacter(character.ID)
 	require.True(t, exists)
@@ -364,10 +365,10 @@ func TestAccountCreateTavern(t *testing.T) {
 	for _, tt := range tests {
 		tf := func(t *testing.T) {
 			account := &AccountActor{
-				mx:    &sync.Mutex{},
-				ID:    uuid.New(),
-				Name:  accountName,
-				Guild: nil,
+				mx:       &sync.Mutex{},
+				ID:       uuid.New(),
+				Username: accountName,
+				Guild:    nil,
 			}
 
 			ctx := context.Background()
@@ -416,10 +417,10 @@ func TestAccountHireCharacter(t *testing.T) {
 			gold.Store(tt.gold)
 
 			account := &AccountActor{
-				mx:    &sync.Mutex{},
-				ID:    uuid.New(),
-				Name:  accountName,
-				Guild: game.NewGuild("TestTavern"),
+				mx:       &sync.Mutex{},
+				ID:       uuid.New(),
+				Username: accountName,
+				Guild:    game.NewGuild("TestTavern"),
 			}
 			account.Guild.Gold = gold
 
@@ -450,34 +451,38 @@ func TestAccountExists(t *testing.T) {
 	db, err := postgres.New()
 	require.NoError(t, err)
 
-	accountID := uuid.MustParse("990014fe-b4d2-49f0-afa7-3118799ec3d4")
 	guild := game.NewGuild("test")
-	hero := game.NewHero("Test Hero")
+	heroA := game.NewHero("Alice")
+	heroB := game.NewHero("Bob")
+	heroC := game.NewHero("Charlie")
+
+	response, createAccountError := repository.CreateAccount(context.Background(), db, model.CreateAccountRequest{
+		Username: "brvy",
+		Email:    "test@actors.dev",
+		Password: "1234",
+	})
+	require.NoError(t, createAccountError)
 
 	actor := AccountActor{
 		mx: &sync.Mutex{},
 
-		ID:    accountID,
-		Name:  "test",
-		Guild: guild,
+		ID:       response.ID,
+		Username: "test",
+		Guild:    guild,
 	}
 
 	err = actor.Persist(context.Background(), db)
 	require.NoError(t, err)
 
 	actor.Guild.Gold.Add(1000)
-	actor.Guild.AddCharacter(&hero)
+	actor.Guild.AddHero(&heroA)
+	actor.Guild.AddHero(&heroB)
+	actor.Guild.AddHero(&heroC)
 
-	for {
-		if len(hero.Inventory.Resources()) > 0 {
-			break
-		}
-
+	for len(heroA.Inventory.Resources()) == 0 {
 		actor.Guild.ProcessTick(context.Background())
 	}
 
 	err = actor.Persist(context.Background(), db)
 	require.NoError(t, err)
-
-	// spew.Dump(accounts)
 }

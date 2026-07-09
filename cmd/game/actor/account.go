@@ -29,9 +29,9 @@ type routeHandler func(ctx context.Context, msg *system.Message) system.HandleEr
 type AccountActor struct {
 	mx *sync.Mutex
 
-	ID    uuid.UUID
-	Name  string
-	Guild *game.Guild
+	ID       uuid.UUID
+	Username string
+	Guild    *game.Guild
 }
 
 func (a *AccountActor) GetID() uuid.UUID {
@@ -90,7 +90,7 @@ func (a *AccountActor) restore(ctx context.Context, snapshot database.Snapshot) 
 	}
 
 	a.ID = aux.ID
-	a.Name = aux.Name
+	a.Username = aux.Username
 	a.Guild = aux.Guild
 
 	return nil
@@ -107,13 +107,27 @@ func (a *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 func (a *AccountActor) Persist(ctx context.Context, db *postgres.Connection) error {
 	a.mx.Lock()
 	actorData := model.AccountActor{
-		ID:    a.ID,
-		Name:  a.Name,
-		Guild: a.Guild,
+		ID:       a.ID,
+		Username: a.Username,
+		Guild:    a.Guild,
 	}
 	a.mx.Unlock()
 
 	return repository.PersistAccountActor(ctx, db, actorData)
+}
+
+func (a *AccountActor) Restore(ctx context.Context, db *postgres.Connection) error {
+	aux, err := repository.RestoreAccountActor(ctx, db, a.ID)
+	if err != nil {
+		return err
+	}
+
+	a.ID = aux.ID
+	a.Username = aux.Username
+	a.Guild = aux.Guild
+
+	// return a.replayTicks(ctx, )
+	return nil
 }
 
 func (a *AccountActor) Start(ctx context.Context) {
@@ -160,7 +174,7 @@ func (a *AccountActor) replayTicks(ctx context.Context, since int64) error {
 	}
 
 	if tempActor.Guild != nil {
-		if errs := tempActor.Guild.ReplayTicks(ctx, ticksSinceTime); errs != nil {
+		if errs := tempActor.Guild.ReplayTicks(ctx); errs != nil {
 			ctxLogger.Error("Failed to replay ticks in tavern during account actor replay", "error", err, "actor_id", a.GetID())
 			return err
 		}
@@ -235,7 +249,7 @@ func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) s
 
 	character := game.GenerateRandomCharacter()
 
-	a.Guild.AddCharacter(&character)
+	a.Guild.AddHero(&character)
 
 	slog.Info("Hired new character", "actor_id", a.GetID(), "character_id", character.ID, "character_name", character.Name)
 
@@ -346,10 +360,10 @@ func accountActorFactory(ctx context.Context) system.Actor {
 	}
 
 	a := &AccountActor{
-		mx:    &sync.Mutex{},
-		ID:    accountParams.ID,
-		Name:  accountParams.Name,
-		Guild: nil,
+		mx:       &sync.Mutex{},
+		ID:       accountParams.ID,
+		Username: accountParams.Name,
+		Guild:    nil,
 	}
 
 	return a
@@ -358,7 +372,7 @@ func accountActorFactory(ctx context.Context) system.Actor {
 func (a *AccountActor) MarshalJSON() ([]byte, error) {
 	raw := map[string]any{
 		"id":     a.ID,
-		"name":   a.Name,
+		"name":   a.Username,
 		"tavern": a.Guild,
 	}
 
@@ -377,7 +391,7 @@ func (a *AccountActor) UnmarshalJSON(data []byte) error {
 	}
 
 	a.ID = aux.ID
-	a.Name = aux.Name
+	a.Username = aux.Name
 	a.Guild = aux.Tavern
 
 	return nil

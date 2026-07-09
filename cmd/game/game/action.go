@@ -26,7 +26,7 @@ type Action interface {
 	String() string
 }
 
-var actionMap = map[string]Action{
+var ActionMap = map[string]Action{
 	ActionNameAdventure: &AdventureAction{},
 	ActionNameHeal:      &HealAction{},
 	ActionNameRest:      &RestAction{},

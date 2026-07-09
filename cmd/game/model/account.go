@@ -88,7 +88,7 @@ func (p AccountActorParams) GetID() uuid.UUID {
 }
 
 type AccountActor struct {
-	ID    uuid.UUID
-	Name  string
-	Guild *game.Guild
+	ID       uuid.UUID   `db:"id"`
+	Username string      `db:"name"`
+	Guild    *game.Guild `db:"-"`
 }

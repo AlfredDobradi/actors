@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
@@ -41,6 +42,12 @@ type Guild struct {
 	Gold   *atomic.Int64
 }
 
+type GuildAux struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Gold int64     `json:"gold"`
+}
+
 func NewGuild(name string) *Guild {
 	startingMoney := &atomic.Int64{}
 	startingMoney.Store(3000)
@@ -52,6 +59,20 @@ func NewGuild(name string) *Guild {
 		name:   name,
 		heroes: make(map[uuid.UUID]*Hero),
 		Gold:   startingMoney,
+	}
+}
+
+func GuildFromAux(aux GuildAux) *Guild {
+	gold := &atomic.Int64{}
+	gold.Store(aux.Gold)
+
+	return &Guild{
+		mx: &sync.RWMutex{},
+
+		id:     aux.ID,
+		name:   aux.Name,
+		heroes: make(map[uuid.UUID]*Hero),
+		Gold:   gold,
 	}
 }
 
@@ -126,9 +147,12 @@ func (g *Guild) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
-func (g *Guild) AddCharacter(character *Hero) {
+func (g *Guild) AddHero(character *Hero) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
+	if g.heroes == nil {
+		g.heroes = make(map[uuid.UUID]*Hero)
+	}
 	g.heroes[character.ID] = character
 }
 
@@ -171,16 +195,15 @@ func (g *Guild) ProcessTick(ctx context.Context) {
 	wg.Wait()
 }
 
-func (g *Guild) ReplayTicks(ctx context.Context, ticks int) []error {
+func (g *Guild) ReplayTicks(ctx context.Context) []error {
 	wg := sync.WaitGroup{}
 	errors := make(chan error, len(g.heroes))
 	for id, character := range g.heroes {
 		wg.Add(1)
 		go func(id uuid.UUID, character *Hero) {
 			defer wg.Done()
-			slog.Debug("Replaying ticks for character", "characterID", character.ID, "characterName", character.Name, "ticks", ticks)
 			// There is currently no way of receiving an error from the hero.ProcessTick method, might change in the future.
-			if err := character.ReplayTicks(ctx, ticks); err != nil {
+			if err := character.ReplayTicks(ctx); err != nil {
 				errors <- fmt.Errorf("error replaying ticks for character %s: %w", character.ID, err)
 				return
 			}
@@ -299,6 +322,7 @@ func (inv *Inventory) Resources() map[string]int {
 type Hero struct {
 	ID         uuid.UUID `json:"id" db:"id"`
 	Name       string    `json:"name" db:"name"`
+	GuildID    uuid.UUID `json:"guild_id" db:"guild_id"`
 	Level      int       `json:"level" db:"level"`
 	Experience int       `json:"experience" db:"experience"`
 	Status     uint8     `json:"status" db:"status"`
@@ -306,6 +330,7 @@ type Hero struct {
 	Health     int       `json:"health" db:"health"`
 	Energy     int       `json:"energy" db:"energy"`
 	Gold       int       `json:"gold" db:"gold"`
+	LastTick   time.Time `json:"last_tick" db:"last_tick"`
 	Action     Action    `json:"-" db:"-"`
 
 	Inventory *Inventory `json:"inventory" db:"inventory"`
@@ -387,7 +412,7 @@ func (c *Hero) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("action data missing _name field")
 		}
 
-		decodedAction, exists := actionMap[actionName]
+		decodedAction, exists := ActionMap[actionName]
 		if !exists {
 			return fmt.Errorf("unknown action type: %s", actionName)
 		}
@@ -415,6 +440,7 @@ func NewHero(name string) Hero {
 		Health:     100,
 		Energy:     100,
 		Gold:       100,
+		LastTick:   time.Now(), // Not really a tick but if we're replaying and they've never done anything we need a starting point
 		Inventory:  NewInventory(),
 		Action:     &IdleAction{},
 	}
@@ -431,6 +457,10 @@ func (c *Hero) GainExperience(amount int) {
 func (c *Hero) ProcessTick(ctx context.Context) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
+
+	defer func() {
+		c.LastTick = time.Now()
+	}()
 
 	if c.Action == nil || c.Action.GetName() == ActionNameIdle {
 		c.Action = c.WhatNext()
@@ -450,10 +480,12 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 	c.Cooldown = 0
 }
 
-func (c *Hero) ReplayTicks(ctx context.Context, ticks int) error {
-	remainingTicks := ticks
+func (c *Hero) ReplayTicks(ctx context.Context) error {
+	secondsSinceTime := time.Since(c.LastTick).Seconds()
+	ticksSinceTime := int(math.Floor(secondsSinceTime / float64(TickRate)))
+	remainingTicks := ticksSinceTime
 
-	slog.Debug("Starting to replay ticks", "characterID", c.ID, "characterName", c.Name, "ticksToReplay", ticks)
+	slog.Debug("Starting to replay ticks", "characterID", c.ID, "characterName", c.Name, "ticksToReplay", remainingTicks)
 
 	actions := make([]string, 0)
 	if c.Action != nil {
@@ -481,7 +513,7 @@ func (c *Hero) ReplayTicks(ctx context.Context, ticks int) error {
 		}
 	}
 
-	slog.Debug("Finished replaying ticks", "characterID", c.ID, "characterName", c.Name, "ticksReplayed", ticks, "actions", actions)
+	slog.Debug("Finished replaying ticks", "characterID", c.ID, "characterName", c.Name, "ticksReplayed", ticksSinceTime, "actions", actions)
 
 	return nil
 }
