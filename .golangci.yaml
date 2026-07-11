@@ -2,15 +2,13 @@
 # Any options can be override creating a .golangci-.yml file
 # in deeper levels of the hierarchy path
 
+version: "2"
+
 # linter settings
 linter-settings:
-  go-vet:
-    # report about shadowed variables
-    check-shadowing: true
-
-  maligned:
-    # print struct with more effective memory layout or not, false by default
-    suggest-new: true
+  govet:
+    enable:
+      - shadow
 
 # enable or disable specific linters
 linters:
@@ -18,19 +16,22 @@ linters:
     - govet
     - gosec
     - nakedret
-    - stylecheck
+    - staticcheck
     - goconst
     - gocyclo
     - misspell
     - godot
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+
+formatters:
+  enable:
+    - goimports
 
     # List of regexps of issue texts to exclude
-issues:
-  # Excluding configuration per path
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
