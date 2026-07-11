@@ -17,6 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	accountName   = "TestAccount"
+	characterName = "TestCharacter"
+)
+
 type ID struct {
 	ID uuid.UUID
 }
@@ -33,13 +38,13 @@ func TestNewAccountHasNoTavern(t *testing.T) {
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
-	params := model.AccountActorParams{Name: "TestAccount"}
+	params := model.AccountActorParams{Name: accountName}
 	actorHandler, err := sys.SpawnWithParams(ctx, "AccountActor", params)
 	require.NoError(t, err)
 	require.NotNil(t, actorHandler)
 
 	actor := actorHandler.GetActor().(*AccountActor)
-	require.Equal(t, "TestAccount", actor.Name)
+	require.Equal(t, accountName, actor.Name)
 	require.Nil(t, actor.Tavern)
 }
 
@@ -57,15 +62,15 @@ func TestAccountActorFactory(t *testing.T) {
 	}{
 		{
 			label:        "AccountActorParams",
-			params:       model.AccountActorParams{ID: fooID, Name: "TestAccount"},
+			params:       model.AccountActorParams{ID: fooID, Name: accountName},
 			testID:       func(id uuid.UUID) bool { return id == fooID },
-			expectedName: "TestAccount",
+			expectedName: accountName,
 		},
 		{
 			label:        "IDParams",
 			params:       ID{ID: barID},
 			testID:       func(id uuid.UUID) bool { return id == barID },
-			expectedName: "default",
+			expectedName: stringDefault,
 		},
 		{
 			label: "InvalidParams",
@@ -76,13 +81,13 @@ func TestAccountActorFactory(t *testing.T) {
 			},
 			// when param type is something unhandled, factory should generate a random ID
 			testID:       func(id uuid.UUID) bool { return id != uuid.Nil },
-			expectedName: "default",
+			expectedName: stringDefault,
 		},
 		{
 			label:        "NilParams",
 			params:       nil,
 			testID:       func(id uuid.UUID) bool { return id != uuid.Nil },
-			expectedName: "default",
+			expectedName: stringDefault,
 		},
 	}
 
@@ -121,7 +126,7 @@ func TestActorPersistence(t *testing.T) {
 
 	character := &game.Hero{
 		ID:   uuid.New(),
-		Name: "TestCharacter",
+		Name: characterName,
 		Action: &game.GatherAction{
 			Resource: game.Wood,
 		},
@@ -151,7 +156,7 @@ func TestActorPersistence(t *testing.T) {
 	char, exists := restoredAccount.Tavern.GetCharacter(character.ID)
 	require.True(t, exists)
 	require.Equal(t, 1000, char.Experience)
-	require.Equal(t, "TestCharacter", char.Name)
+	require.Equal(t, characterName, char.Name)
 	require.Equal(t, game.StatusBusy, char.Status)
 	require.Equal(t, 3, char.Cooldown)
 	require.NotNil(t, char.Action)
@@ -166,7 +171,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 
 	testHeroWithAction := &game.Hero{
 		ID:   uuid.New(),
-		Name: "TestCharacter",
+		Name: characterName,
 		Action: &game.GatherAction{
 			Resource: game.Wood,
 		},
@@ -178,7 +183,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 
 	testHeroNoAction := &game.Hero{
 		ID:         uuid.New(),
-		Name:       "TestCharacter",
+		Name:       characterName,
 		Action:     nil,
 		Level:      5,
 		Experience: 1500,
@@ -231,7 +236,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 		tf := func(t *testing.T) {
 			account := &AccountActor{
 				ID:     uuid.New(),
-				Name:   "TestAccount",
+				Name:   accountName,
 				Tavern: tt.tavern,
 				Gold:   gold,
 			}
@@ -282,7 +287,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 func TestAccountUnmarshalJSON(t *testing.T) {
 	account := &AccountActor{
 		ID:     uuid.New(),
-		Name:   "TestAccount",
+		Name:   accountName,
 		Tavern: game.NewTavern("TestTavern"),
 	}
 
@@ -291,7 +296,7 @@ func TestAccountUnmarshalJSON(t *testing.T) {
 
 	character := &game.Hero{
 		ID:         uuid.New(),
-		Name:       "TestCharacter",
+		Name:       characterName,
 		Level:      5,
 		Experience: 1500,
 		Status:     game.StatusBusy,
@@ -357,7 +362,7 @@ func TestAccountCreateTavern(t *testing.T) {
 			account := &AccountActor{
 				mx:     &sync.Mutex{},
 				ID:     uuid.New(),
-				Name:   "TestAccount",
+				Name:   accountName,
 				Tavern: nil,
 			}
 
@@ -409,7 +414,7 @@ func TestAccountHireCharacter(t *testing.T) {
 			account := &AccountActor{
 				mx:     &sync.Mutex{},
 				ID:     uuid.New(),
-				Name:   "TestAccount",
+				Name:   accountName,
 				Tavern: game.NewTavern("TestTavern"),
 				Gold:   gold,
 			}

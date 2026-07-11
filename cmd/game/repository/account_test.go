@@ -11,13 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testUser     = "testuser"
+	testEmail    = "testuser@example.com"
+	testPassword = "password123"
+)
+
 func TestCreateAccount(t *testing.T) {
 	db := memory.NewStore()
 
 	req := model.CreateAccountRequest{
-		Username: "testuser",
-		Email:    "testuser@example.com",
-		Password: "password123",
+		Username: testUser,
+		Email:    testEmail,
+		Password: testPassword,
 	}
 
 	resp, err := CreateAccount(context.Background(), db, req)
@@ -37,9 +43,9 @@ func TestValidateCredentials(t *testing.T) {
 	// Create a test account
 	account := model.Account{
 		ID:        uuid.New(),
-		Username:  "testuser",
-		Email:     "testuser@example.com",
-		Password:  "password123",
+		Username:  testUser,
+		Email:     testEmail,
+		Password:  testPassword,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 		Active:    true,
@@ -51,8 +57,8 @@ func TestValidateCredentials(t *testing.T) {
 
 	// Validate credentials
 	req := model.CreateSessionRequest{
-		Username: "testuser",
-		Password: "password123",
+		Username: testUser,
+		Password: testPassword,
 	}
 
 	validatedAccount, err := ValidateCredentials(context.Background(), db, req)

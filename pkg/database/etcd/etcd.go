@@ -45,7 +45,7 @@ func (s *Store) Set(ctx context.Context, key string, value fmt.Stringer) error {
 
 	slog.Debug("Setting key in database", fields...)
 
-	_, err := s.Client.Put(context.Background(), key, value.String(), opts...)
+	_, err := s.Put(context.Background(), key, value.String(), opts...)
 	return err
 }
 
@@ -120,7 +120,7 @@ func (s *Store) Persist(ctx context.Context, key string, value database.Snapshot
 	span.GetLogger().Info("Persisting snapshot in database", "key", key, "timestamp", value.Timestamp)
 
 	putCtx := context.Background()
-	_, err := s.Client.Put(putCtx, key, value.String())
+	_, err := s.Put(putCtx, key, value.String())
 	return err
 }
 
@@ -159,7 +159,7 @@ func init() {
 }
 
 func (s *Store) StartSession(ctx context.Context) error {
-	resp, err := s.Client.Grant(ctx, 10) // 10 second TTL
+	resp, err := s.Grant(ctx, 10) // 10 second TTL
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ func (s *Store) KeepAlive(ctx context.Context, callback func(any)) error {
 }
 
 func (s *Store) EndSession(ctx context.Context) error {
-	_, err := s.Client.Revoke(ctx, clientv3.LeaseID(s.sessionID))
+	_, err := s.Revoke(ctx, clientv3.LeaseID(s.sessionID))
 
 	slog.Info("Ending database session", "session_id", s.sessionID)
 

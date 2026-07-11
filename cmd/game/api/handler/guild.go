@@ -28,7 +28,7 @@ func HandleCreateTavern(s *state.Context) func(w http.ResponseWriter, r *http.Re
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
-		defer r.Body.Close()
+		defer closeBody(r.Body)
 
 		_, err := s.System.Request(span.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindActor, Subject: accountData.ID.String()}, httpReq)
 		if err != nil {

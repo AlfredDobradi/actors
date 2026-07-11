@@ -21,8 +21,8 @@ func Authorization(db database.DB) func(http.Handler) http.Handler {
 				return
 			}
 
-			if err := repository.ValidateSession(r.Context(), db, sessionID); err != nil {
-				slog.Error("Invalid session", "error", err)
+			if validationErr := repository.ValidateSession(r.Context(), db, sessionID); validationErr != nil {
+				slog.Error("Invalid session", "error", validationErr)
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return
 			}

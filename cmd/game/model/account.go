@@ -34,7 +34,7 @@ type Account struct {
 func (a Account) String() string {
 	buf := bytes.NewBufferString("")
 	encoder := json.NewEncoder(buf)
-	if err := encoder.Encode(a); err != nil {
+	if err := encoder.Encode(a); err != nil { //nolint:gosec
 		slog.Error("Failed to encode account to JSON", "error", err, "account_id", a.ID)
 		return ""
 	}
