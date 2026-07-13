@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 )
 
@@ -62,7 +63,7 @@ func createAccount() (response, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	must(err)
-	defer resp.Body.Close()
+	defer closeBody(resp)
 
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(resp.Body)
@@ -85,7 +86,7 @@ func createSession() (response, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	must(err)
-	defer resp.Body.Close()
+	defer closeBody(resp)
 
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(resp.Body)
@@ -108,7 +109,7 @@ func createTavern(token string) (response, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	must(err)
-	defer resp.Body.Close()
+	defer closeBody(resp)
 
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(resp.Body)
@@ -131,7 +132,7 @@ func hireCharacter(token string) (response, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	must(err)
-	defer resp.Body.Close()
+	defer closeBody(resp)
 
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(resp.Body)
@@ -141,4 +142,10 @@ func hireCharacter(token string) (response, error) {
 		StatusCode: resp.StatusCode,
 		Body:       buf,
 	}, err
+}
+
+func closeBody(res *http.Response) {
+	if err := res.Body.Close(); err != nil {
+		slog.Error("failed to close response body", "error", err)
+	}
 }

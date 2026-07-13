@@ -19,6 +19,10 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	stringDefault = "default"
+)
+
 type routeHandler func(ctx context.Context, msg *system.Message) system.HandleError
 
 type AccountActor struct {
@@ -143,9 +147,9 @@ func (a *AccountActor) replayTicks(ctx context.Context, since int64) error {
 		return err
 	}
 
-	if err := tempActor.restore(ctx, database.Snapshot{Data: snapshot.Data}); err != nil {
-		ctxLogger.Error("Failed to restore account actor from snapshot for replay", "error", err, "actor_id", a.GetID())
-		return err
+	if restoreErr := tempActor.restore(ctx, database.Snapshot{Data: snapshot.Data}); restoreErr != nil {
+		ctxLogger.Error("Failed to restore account actor from snapshot for replay", "error", restoreErr, "actor_id", a.GetID())
+		return restoreErr
 	}
 
 	if errs := tempActor.Tavern.ReplayTicks(ctx, ticksSinceTime); errs != nil {
@@ -180,7 +184,9 @@ func (a *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 	}
 
 	if request.Name == "" {
-		msg.Respond(a.ID, model.NewTavernResponse{OK: false, Error: "tavern name cannot be empty"}) //nolint:errcheck
+		if err := msg.Respond(a.ID, model.NewTavernResponse{OK: false, Error: "tavern name cannot be empty"}); err != nil {
+			slog.Error("failed to send response", "error", err)
+		}
 		return NewAccountError(fmt.Errorf("tavern name cannot be empty"))
 	}
 
@@ -198,7 +204,9 @@ func (a *AccountActor) createTavern(ctx context.Context, msg *system.Message) sy
 
 func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) system.HandleError {
 	if a.Tavern == nil {
-		msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: "tavern not found for account"}) //nolint:errcheck
+		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: "tavern not found for account"}); err != nil {
+			slog.Error("failed to send response", "error", err)
+		}
 
 		return NewAccountError(fmt.Errorf("tavern not found for account"))
 	}
@@ -209,7 +217,9 @@ func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) s
 	cost := game.HeroPriceMultiplier(len(a.Tavern.Characters())) * 1000
 
 	if cost > a.Gold.Load() {
-		msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", a.Gold.Load(), cost)}) //nolint:errcheck
+		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", a.Gold.Load(), cost)}); err != nil {
+			slog.Error("failed to send response", "error", err)
+		}
 		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %d, need %d", a.Gold.Load(), cost))
 	} else {
 		a.Gold.Add(-cost)
@@ -307,7 +317,7 @@ func (a *AccountActor) getCharacters(ctx context.Context, msg *system.Message) s
 func accountActorFactory(ctx context.Context) system.Actor {
 	accountParams := model.AccountActorParams{
 		ID:   uuid.New(),
-		Name: "default",
+		Name: stringDefault,
 	}
 
 	params := ctx.Value(sysmodel.ContextKeyFactoryParams)
@@ -319,7 +329,7 @@ func accountActorFactory(ctx context.Context) system.Actor {
 			accountParams.ID = p.GetID()
 		default:
 			slog.Warn("Received unexpected factory params type, using default params", "expectedType", fmt.Sprintf("%T", model.AccountActorParams{}), "actualType", fmt.Sprintf("%T", params))
-			accountParams = model.AccountActorParams{ID: uuid.New(), Name: "default"}
+			accountParams = model.AccountActorParams{ID: uuid.New(), Name: stringDefault}
 		}
 	}
 

@@ -17,7 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const mockBusActorKind = "MockBusActor"
+const (
+	mockBusActorKind = "MockBusActor"
+	stringFoo        = "foo"
+	stringBar        = "bar"
+)
 
 type MockBusActor struct {
 	ID       uuid.UUID
@@ -83,14 +87,14 @@ func TestRouting(t *testing.T) {
 
 	msgFoo := &system.Message{
 		ID:        uuid.New(),
-		Payload:   "foo",
-		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "foo"},
+		Payload:   stringFoo,
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: stringFoo},
 	}
 
 	msgBar := &system.Message{
 		ID:        uuid.New(),
-		Payload:   "bar",
-		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "bar"},
+		Payload:   stringBar,
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: stringBar},
 	}
 
 	msgFoobar := &system.Message{
@@ -114,10 +118,10 @@ func TestRouting(t *testing.T) {
 			defer wg.Done()
 			which := i % 3
 
-			start := time.Now()
+			innerStart := time.Now()
 			require.NoError(t, sys.Route(context.Background(), msgs[which]))
 			tmx.Lock()
-			times = append(times, time.Since(start))
+			times = append(times, time.Since(innerStart))
 			tmx.Unlock()
 
 			cmx.Lock()
@@ -141,11 +145,11 @@ func TestRouting(t *testing.T) {
 	mockActorFoo := handlerFoo.GetActor().(*MockBusActor)
 	mockActorBar := handlerBar.GetActor().(*MockBusActor)
 
-	require.NotContains(t, mockActorFoo.messages, "bar")
-	require.NotContains(t, mockActorBar.messages, "foo")
+	require.NotContains(t, mockActorFoo.messages, stringBar)
+	require.NotContains(t, mockActorBar.messages, stringFoo)
 
-	require.Equal(t, len(mockActorFoo.messages), counts["foo"]+counts["foobar"])
-	require.Equal(t, len(mockActorBar.messages), counts["bar"]+counts["foobar"])
+	require.Equal(t, len(mockActorFoo.messages), counts[stringFoo]+counts["foobar"])
+	require.Equal(t, len(mockActorBar.messages), counts[stringBar]+counts["foobar"])
 
 	// Clean up
 	handlerFoo.Stop()
@@ -222,8 +226,8 @@ func TestUnsubscribe(t *testing.T) {
 
 func generateSubscriptions(b *testing.B, n int) []*system.Subscription {
 	patternText := []string{
-		"foo",
-		"bar",
+		stringFoo,
+		stringBar,
 		"baz",
 		"qux",
 		"quux",
@@ -242,9 +246,9 @@ func BenchmarkRoutingSingular(b *testing.B) {
 	n := 1000
 	subs := generateSubscriptions(b, n)
 
-	topic := "foo"
+	topic := stringFoo
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, sub := range subs {
 			if sub.GetPattern().MatchString(topic) {
 				slog.Debug("matched subscription", "pattern", sub.GetPattern().String())
@@ -263,9 +267,9 @@ func BenchmarkRoutingGrouped(b *testing.B) {
 		subsGrouped[sub.GetPattern().String()] = append(subsGrouped[sub.GetPattern().String()], sub)
 	}
 
-	topic := "foo"
+	topic := stringFoo
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for patternStr := range subsGrouped {
 			pattern, err := regexp.Compile(patternStr)
 			require.NoError(b, err)

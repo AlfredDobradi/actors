@@ -13,6 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	actorKind      string = "test"
+	subjectName    string = "test"
+	hookPreStart   string = "preStart"
+	hookPostStart  string = "postStart"
+	hookPoisoned   string = "poisoned"
+	hookTerminated string = "terminated"
+)
+
 // MockActor is used for testing.
 type MockActor struct {
 	id           uuid.UUID
@@ -123,10 +132,10 @@ func TestPreStartHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
-		system.WithPreStartHook(tracker.CreateHook("preStart")),
+		system.WithPreStartHook(tracker.CreateHook(hookPreStart)),
 	)
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
@@ -146,7 +155,7 @@ func TestPreStartHookExecution(t *testing.T) {
 	if len(order) == 0 {
 		t.Fatal("no hooks executed")
 	}
-	if order[0] != "preStart" {
+	if order[0] != hookPreStart {
 		t.Errorf("expected preStart to be first, got %v", order)
 	}
 }
@@ -156,12 +165,12 @@ func TestPostStartHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 	registry.RegisterFactory(
 		actor.GetKind(),
 		func(ctx context.Context) system.Actor { return actor },
-		system.WithPostStartHook(tracker.CreateHook("postStart")),
+		system.WithPostStartHook(tracker.CreateHook(hookPostStart)),
 	)
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
@@ -180,7 +189,7 @@ func TestPostStartHookExecution(t *testing.T) {
 	order := tracker.GetOrder()
 	found := false
 	for _, h := range order {
-		if h == "postStart" {
+		if h == hookPostStart {
 			found = true
 			break
 		}
@@ -195,7 +204,7 @@ func TestHookExecutionOrder(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 
 	callback := func(ctx context.Context) system.Actor {
@@ -203,10 +212,10 @@ func TestHookExecutionOrder(t *testing.T) {
 	}
 
 	hooks := []system.HookOpt{
-		system.WithPreStartHook(tracker.CreateHook("preStart")),
-		system.WithPostStartHook(tracker.CreateHook("postStart")),
-		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")),
+		system.WithPreStartHook(tracker.CreateHook(hookPreStart)),
+		system.WithPostStartHook(tracker.CreateHook(hookPostStart)),
+		system.WithPoisonedHook(tracker.CreateHook(hookPoisoned)),
+		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)),
 	}
 
 	registry.RegisterFactory(actor.GetKind(), callback, hooks...)
@@ -226,7 +235,7 @@ func TestHookExecutionOrder(t *testing.T) {
 	order := tracker.GetOrder()
 
 	// Verify all expected hooks were executed
-	expectedHooks := map[string]bool{"preStart": false, "postStart": false, "poisoned": false, "terminated": false}
+	expectedHooks := map[string]bool{hookPreStart: false, hookPostStart: false, hookPoisoned: false, hookTerminated: false}
 	for _, h := range order {
 		if _, exists := expectedHooks[h]; exists {
 			expectedHooks[h] = true
@@ -243,10 +252,10 @@ func TestHookExecutionOrder(t *testing.T) {
 	poisonedIdx := -1
 	terminatedIdx := -1
 	for i, h := range order {
-		if h == "poisoned" {
+		if h == hookPoisoned {
 			poisonedIdx = i
 		}
-		if h == "terminated" {
+		if h == hookTerminated {
 			terminatedIdx = i
 		}
 	}
@@ -260,11 +269,11 @@ func TestPoisonedHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
-		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+		system.WithPoisonedHook(tracker.CreateHook(hookPoisoned)),
+		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
@@ -281,7 +290,7 @@ func TestPoisonedHookExecution(t *testing.T) {
 	order := tracker.GetOrder()
 	found := false
 	for _, h := range order {
-		if h == "poisoned" {
+		if h == hookPoisoned {
 			found = true
 			break
 		}
@@ -296,10 +305,10 @@ func TestTerminatedHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
-		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
@@ -316,7 +325,7 @@ func TestTerminatedHookExecution(t *testing.T) {
 	order := tracker.GetOrder()
 	found := false
 	for _, h := range order {
-		if h == "terminated" {
+		if h == hookTerminated {
 			found = true
 			break
 		}
@@ -331,7 +340,7 @@ func TestCrashHookExecution(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	actor.shouldCrash = true
 	actor.crashAfterCount = 0      // Crash on first message
 	actor.returnsRecovable = false // Make the crash non-recoverable
@@ -339,7 +348,7 @@ func TestCrashHookExecution(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithCrashHook(tracker.CreateHook("crash")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
@@ -353,7 +362,7 @@ func TestCrashHookExecution(t *testing.T) {
 	msg := &system.Message{
 		ID:        uuid.New(),
 		Payload:   []byte("test"),
-		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "test"},
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: subjectName},
 	}
 	handler.SendMessage(ctx, msg)
 
@@ -379,12 +388,12 @@ func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithCrashHook(tracker.CreateHook("crash")),
-		system.WithPoisonedHook(tracker.CreateHook("poisoned")),
-		system.WithTerminatedHook(tracker.CreateHook("terminated")))
+		system.WithPoisonedHook(tracker.CreateHook(hookPoisoned)),
+		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
 	sys := system.MustNewSystem(registry, db)
 
@@ -411,7 +420,7 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 	tracker := &HookTracker{}
 	ctx := context.Background()
 
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithTerminatedHook(tracker.CreateHook("terminated1")),
@@ -445,7 +454,7 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 // TestMessageProcessingBeforeCrash verifies messages are processed before crash detection.
 func TestMessageProcessingBeforeCrash(t *testing.T) {
 	ctx := context.Background()
-	actor := NewMockActor("test")
+	actor := NewMockActor(actorKind)
 	actor.shouldCrash = true
 	actor.crashAfterCount = 3      // Crash after 3 messages
 	actor.returnsRecovable = false // Make the crash non-recoverable
@@ -466,7 +475,7 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 		handler.SendMessage(ctx, &system.Message{
 			ID:        uuid.New(),
 			Payload:   []byte("msg"),
-			Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "test"},
+			Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: subjectName},
 		})
 	}
 
@@ -480,7 +489,7 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 	handler.SendMessage(ctx, &system.Message{
 		ID:        uuid.New(),
 		Payload:   []byte("crash"),
-		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: "test"},
+		Recipient: system.Recipient{Kind: system.RecipientKindTopic, Subject: subjectName},
 	})
 
 	time.Sleep(100 * time.Millisecond)

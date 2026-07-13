@@ -23,7 +23,7 @@ func HandleCreateAccount(s *state.Context) func(w http.ResponseWriter, r *http.R
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
-		defer r.Body.Close()
+		defer closeBody(r.Body)
 
 		if err := repository.CheckAccountExists(span.Context(), s.DB, httpReq); err != nil {
 			http.Error(w, "Account already exists", http.StatusConflict)
@@ -52,7 +52,7 @@ func HandleCreateSession(s *state.Context) func(w http.ResponseWriter, r *http.R
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
-		defer r.Body.Close()
+		defer closeBody(r.Body)
 
 		account, err := repository.ValidateCredentials(span.Context(), s.DB, httpReq)
 		if err != nil {

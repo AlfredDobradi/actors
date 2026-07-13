@@ -4,12 +4,6 @@
 
 version: "2"
 
-# linter settings
-linter-settings:
-  govet:
-    enable:
-      - shadow
-
 # enable or disable specific linters
 linters:
   enable:
@@ -29,6 +23,10 @@ linters:
           - errcheck
           - dupl
           - gosec
+  settings:
+    govet:
+      enable:
+        - shadow
 
 formatters:
   enable:
