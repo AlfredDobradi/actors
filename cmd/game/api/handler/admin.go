@@ -15,7 +15,15 @@ import (
 func HandleAdminGetAccounts(s *state.Context) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		span := telemetry.SpanFromRequest(r)
-		accounts, err := repository.GetAccounts(span.Context(), s.DB)
+
+		repo, repoErr := repository.Get(s.DB)
+		if repoErr != nil {
+			slog.Error("Failed to get repository", "error", repoErr)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
+		accounts, err := repo.GetAccounts(span.Context())
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
@@ -45,17 +53,24 @@ func HandleAdminGetAccount(s *state.Context) func(w http.ResponseWriter, r *http
 	return func(w http.ResponseWriter, r *http.Request) {
 		span := telemetry.SpanFromRequest(r)
 
+		repo, repoErr := repository.Get(s.DB)
+		if repoErr != nil {
+			slog.Error("Failed to get repository", "error", repoErr)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
 		vars := mux.Vars(r)
 		accountID := vars["accountId"]
 
-		account, err := repository.GetAccount(span.Context(), s.DB, accountID)
+		account, err := repo.GetAccount(span.Context(), accountID)
 		if err != nil {
 			slog.Error("failed to fetch account", "error", err.Error(), "account_id", account.ID)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
-		sessions, err := repository.GetSessionsByAccountID(span.Context(), s.DB, account.ID.String())
+		sessions, err := repo.GetSessionsByAccountID(span.Context(), account.ID.String())
 		if err != nil {
 			slog.Error("failed to fetch sessions", "error", err.Error(), "account_id", account.ID)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
@@ -18,4 +19,8 @@ func New() (*Connection, error) {
 	return &Connection{
 		DB: c,
 	}, nil
+}
+
+func init() {
+	var _ database.Store = (*Connection)(nil)
 }

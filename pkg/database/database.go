@@ -2,12 +2,14 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 type contextKey uint8
@@ -81,4 +83,12 @@ type KeyValue interface {
 	EndSession(ctx context.Context) error
 	Persist(ctx context.Context, key string, value Snapshot) error
 	Restore(ctx context.Context, key string) (Snapshot, error)
+}
+
+type Store interface {
+	Get(dest any, query string, args ...any) error
+	Select(dest any, query string, args ...any) error
+	NamedExec(query string, arg any) (sql.Result, error)
+	Exec(query string, args ...any) (sql.Result, error)
+	Beginx() (*sqlx.Tx, error)
 }

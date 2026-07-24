@@ -8,10 +8,10 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/cmd/game/paseto"
 	"github.com/alfreddobradi/actors/cmd/game/repository"
-	"github.com/alfreddobradi/actors/pkg/database/postgres"
+	"github.com/alfreddobradi/actors/pkg/database"
 )
 
-func Authorization(db *postgres.Connection) func(http.Handler) http.Handler {
+func Authorization(db database.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sessionID, err := paseto.ValidateSessionTokenFromRequest(r.Context(), r)
@@ -21,13 +21,20 @@ func Authorization(db *postgres.Connection) func(http.Handler) http.Handler {
 				return
 			}
 
-			if validationErr := repository.ValidateSession(r.Context(), db, sessionID); validationErr != nil {
+			repo, repoErr := repository.Get(db)
+			if repoErr != nil {
+				slog.Error("Failed to get repository", "error", repoErr)
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+				return
+			}
+
+			if validationErr := repo.ValidateSession(r.Context(), sessionID); validationErr != nil {
 				slog.Error("Invalid session", "error", validationErr)
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return
 			}
 
-			accountData, err := repository.GetAccountBySessionID(r.Context(), db, sessionID)
+			accountData, err := repo.GetAccountBySessionID(r.Context(), sessionID)
 			if err != nil {
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return

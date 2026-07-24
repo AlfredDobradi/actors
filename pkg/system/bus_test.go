@@ -12,7 +12,6 @@ import (
 
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
-	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -40,10 +39,10 @@ func (a *MockBusActor) Snapshot(ctx context.Context) (database.Snapshot, error) 
 func (a *MockBusActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	return nil
 }
-func (m *MockBusActor) Persist(ctx context.Context, db *postgres.Connection) error {
+func (m *MockBusActor) Persist(ctx context.Context, db database.Store) error {
 	return nil
 }
-func (m *MockBusActor) Restore(ctx context.Context, db *postgres.Connection) error {
+func (m *MockBusActor) Restore(ctx context.Context, db database.Store) error {
 	return nil
 }
 func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {

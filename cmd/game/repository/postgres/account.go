@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -10,13 +10,12 @@ import (
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
-	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
-func CheckAccountExists(ctx context.Context, db *postgres.Connection, req model.CreateAccountRequest) error {
+func (r *Repository) CheckAccountExists(ctx context.Context, req model.CreateAccountRequest) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Checking if account exists", "username", req.Username, "email", req.Email)
 
@@ -27,7 +26,7 @@ func CheckAccountExists(ctx context.Context, db *postgres.Connection, req model.
 	}
 
 	var row Res
-	err := db.Get(&row, "SELECT id, username, email FROM accounts WHERE username = $1 OR email = $2", req.Username, req.Email)
+	err := r.db.Get(&row, "SELECT id, username, email FROM accounts WHERE username = $1 OR email = $2", req.Username, req.Email)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return nil
@@ -46,7 +45,7 @@ func CheckAccountExists(ctx context.Context, db *postgres.Connection, req model.
 	return nil
 }
 
-func CreateAccount(ctx context.Context, db *postgres.Connection, req model.CreateAccountRequest) (model.CreateAccountResponse, error) {
+func (r *Repository) CreateAccount(ctx context.Context, req model.CreateAccountRequest) (model.CreateAccountResponse, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Creating account", "username", req.Username, "email", req.Email)
 
@@ -66,7 +65,7 @@ func CreateAccount(ctx context.Context, db *postgres.Connection, req model.Creat
 	}
 
 	c := make([]Aux, 0)
-	if err := db.Select(&c, "SELECT username, email FROM accounts WHERE username = $1 OR email = $2", req.Username, req.Email); err != nil {
+	if err := r.db.Select(&c, "SELECT username, email FROM accounts WHERE username = $1 OR email = $2", req.Username, req.Email); err != nil {
 		if err != sql.ErrNoRows {
 			return model.CreateAccountResponse{}, err
 		}
@@ -76,26 +75,26 @@ func CreateAccount(ctx context.Context, db *postgres.Connection, req model.Creat
 		return model.CreateAccountResponse{}, fmt.Errorf("this username or email has already been used")
 	}
 
-	if _, err := db.NamedExec("INSERT INTO accounts (id, username, email, password, created_at, updated_at, active) VALUES (:id, :username, :email, :password, :created_at, :updated_at, :active)", account); err != nil {
+	if _, err := r.db.NamedExec("INSERT INTO accounts (id, username, email, password, created_at, updated_at, active) VALUES (:id, :username, :email, :password, :created_at, :updated_at, :active)", account); err != nil {
 		return model.CreateAccountResponse{}, err
 	}
 
 	return model.CreateAccountResponse{ID: account.ID, Username: account.Username, Email: account.Email}, nil
 }
 
-func ValidateCredentials(ctx context.Context, db *postgres.Connection, req model.CreateSessionRequest) (model.Account, error) {
+func (r *Repository) ValidateCredentials(ctx context.Context, req model.CreateSessionRequest) (model.Account, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Validating credentials", "username", req.Username)
 
 	var acc model.Account
-	if err := db.Get(&acc, "SELECT * FROM accounts WHERE username = $1 AND password = $2", req.Username, req.Password); err != nil {
+	if err := r.db.Get(&acc, "SELECT * FROM accounts WHERE username = $1 AND password = $2", req.Username, req.Password); err != nil {
 		return model.Account{}, err
 	}
 
 	return acc, nil
 }
 
-func CreateSession(ctx context.Context, db *postgres.Connection, accountID uuid.UUID) (uuid.UUID, error) {
+func (r *Repository) CreateSession(ctx context.Context, accountID uuid.UUID) (uuid.UUID, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Creating session", "account_id", accountID)
 
@@ -107,14 +106,14 @@ func CreateSession(ctx context.Context, db *postgres.Connection, accountID uuid.
 		Active:    true,
 	}
 
-	if _, err := db.NamedExec("INSERT INTO sessions (id, account_id, created_at, updated_at, active) VALUES (:id, :account_id, :created_at, :updated_at, :active)", session); err != nil {
+	if _, err := r.db.NamedExec("INSERT INTO sessions (id, account_id, created_at, updated_at, active) VALUES (:id, :account_id, :created_at, :updated_at, :active)", session); err != nil {
 		return uuid.Nil, err
 	}
 
 	return session.ID, nil
 }
 
-func GetAccountBySessionID(ctx context.Context, db *postgres.Connection, sessionID uuid.UUID) (model.Account, error) {
+func (r *Repository) GetAccountBySessionID(ctx context.Context, sessionID uuid.UUID) (model.Account, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Getting account by session ID", "session_id", sessionID)
 
@@ -122,24 +121,24 @@ func GetAccountBySessionID(ctx context.Context, db *postgres.Connection, session
 		AccountID uuid.UUID `db:"account_id"`
 	}
 	var sess Res
-	if err := db.Get(&sess, "SELECT account_id FROM sessions WHERE id = $1", sessionID); err != nil {
+	if err := r.db.Get(&sess, "SELECT account_id FROM sessions WHERE id = $1", sessionID); err != nil {
 		return model.Account{}, err
 	}
 
 	var acc model.Account
-	if err := db.Get(&acc, "SELECT * FROM accounts WHERE id = $1", sess.AccountID); err != nil {
+	if err := r.db.Get(&acc, "SELECT * FROM accounts WHERE id = $1", sess.AccountID); err != nil {
 		return model.Account{}, err
 	}
 
 	return acc, nil
 }
 
-func ValidateSession(ctx context.Context, db *postgres.Connection, sessionID uuid.UUID) error {
+func (r *Repository) ValidateSession(ctx context.Context, sessionID uuid.UUID) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Validating session", "session_id", sessionID)
 
 	var session model.Session
-	if err := db.Get(&session, "SELECT * FROM sessions WHERE id = $1", sessionID); err != nil {
+	if err := r.db.Get(&session, "SELECT * FROM sessions WHERE id = $1", sessionID); err != nil {
 		return err
 	}
 
@@ -150,75 +149,75 @@ func ValidateSession(ctx context.Context, db *postgres.Connection, sessionID uui
 	return nil
 }
 
-func DeleteSession(ctx context.Context, db *postgres.Connection, sessionID uuid.UUID) error {
+func (r *Repository) DeleteSession(ctx context.Context, sessionID uuid.UUID) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Deleting session", "session_id", sessionID)
 
-	if _, err := db.Exec("DELETE FROM sessions WHERE id = $1", sessionID); err != nil {
+	if _, err := r.db.Exec("DELETE FROM sessions WHERE id = $1", sessionID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func RevokeSession(ctx context.Context, db *postgres.Connection, sessionID uuid.UUID) error {
+func (r *Repository) RevokeSession(ctx context.Context, sessionID uuid.UUID) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Revoking session", "session_id", sessionID)
 
-	if _, err := db.Exec("UPDATE sessions SET active = false WHERE id = $1", sessionID); err != nil {
+	if _, err := r.db.Exec("UPDATE sessions SET active = false WHERE id = $1", sessionID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func GetAccounts(ctx context.Context, db *postgres.Connection) ([]model.Account, error) {
+func (r *Repository) GetAccounts(ctx context.Context) ([]model.Account, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Retrieving all accounts")
 
 	accounts := make([]model.Account, 0)
-	if err := db.Select(&accounts, "SELECT * FROM accounts"); err != nil {
+	if err := r.db.Select(&accounts, "SELECT * FROM accounts"); err != nil {
 		return nil, err
 	}
 
 	return accounts, nil
 }
 
-func GetAccount(ctx context.Context, db *postgres.Connection, accountID string) (model.Account, error) {
+func (r *Repository) GetAccount(ctx context.Context, accountID string) (model.Account, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Retrieving all accounts")
 
 	var account model.Account
-	if err := db.Get(&account, "SELECT * FROM accounts WHERE id = $1", accountID); err != nil {
+	if err := r.db.Get(&account, "SELECT * FROM accounts WHERE id = $1", accountID); err != nil {
 		return model.Account{}, err
 	}
 
 	return account, nil
 }
 
-func GetSessionsByAccountID(ctx context.Context, db *postgres.Connection, accountID string) ([]model.Session, error) {
+func (r *Repository) GetSessionsByAccountID(ctx context.Context, accountID string) ([]model.Session, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Retrieving sessions for account", "account_id", accountID)
 
 	sessions := make([]model.Session, 0)
-	if err := db.Select(&sessions, "SELECT * FROM sessions WHERE account_id = $1", accountID); err != nil {
+	if err := r.db.Select(&sessions, "SELECT * FROM sessions WHERE account_id = $1", accountID); err != nil {
 		return nil, err
 	}
 
 	return sessions, nil
 }
 
-func PersistAccountActor(ctx context.Context, db *postgres.Connection, account model.AccountActor) error {
+func (r *Repository) PersistAccountActor(ctx context.Context, account model.AccountActor) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Persisting account data", "account_id", account.ID)
 
-	tx, err := db.Beginx()
+	tx, err := r.db.Beginx()
 	if err != nil {
 		return err
 	}
 
 	if account.Guild != nil {
-		if err := persistGuildData(span.Context(), tx, account.ID, account.Guild); err != nil {
+		if err := r.persistGuildData(span.Context(), tx, account.ID, account.Guild); err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
 				slog.Error("failed to roll back account data persistence", "error", rollbackErr)
 			}
@@ -234,7 +233,7 @@ type actionAux struct {
 	Data map[string]any `json:"data"`
 }
 
-func persistGuildData(ctx context.Context, tx *sqlx.Tx, accountID uuid.UUID, guild *game.Guild) error {
+func (r *Repository) persistGuildData(ctx context.Context, tx *sqlx.Tx, accountID uuid.UUID, guild *game.Guild) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Persisting guild data", "account_id", accountID)
 
@@ -300,16 +299,16 @@ func persistGuildData(ctx context.Context, tx *sqlx.Tx, accountID uuid.UUID, gui
 	return nil
 }
 
-func RestoreAccountActor(ctx context.Context, db *postgres.Connection, accountID uuid.UUID) (*model.AccountActor, error) {
+func (r *Repository) RestoreAccountActor(ctx context.Context, accountID uuid.UUID) (*model.AccountActor, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Restoring account data", "account_id", accountID)
 
-	accountData, err := restoreAccountData(ctx, db, accountID)
+	accountData, err := r.restoreAccountData(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
 
-	guildData, err := restoreGuildData(span.Context(), db, accountID)
+	guildData, err := r.restoreGuildData(span.Context(), accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -319,9 +318,9 @@ func RestoreAccountActor(ctx context.Context, db *postgres.Connection, accountID
 	return accountData, nil
 }
 
-func restoreGuildData(ctx context.Context, db *postgres.Connection, accountID uuid.UUID) (*game.Guild, error) {
+func (r *Repository) restoreGuildData(ctx context.Context, accountID uuid.UUID) (*game.Guild, error) {
 	guildAux := game.GuildAux{}
-	if err := db.Get(&guildAux, "SELECT id, name, gold FROM guilds WHERE account_id = $1", accountID); err != nil {
+	if err := r.db.Get(&guildAux, "SELECT id, name, gold FROM guilds WHERE account_id = $1", accountID); err != nil {
 		return nil, err
 	}
 
@@ -329,18 +328,18 @@ func restoreGuildData(ctx context.Context, db *postgres.Connection, accountID uu
 
 	heroes := make([]game.Hero, 0)
 
-	if err := db.Select(&heroes, "SELECT id, name, guild_id, level, experience, status, cooldown, health, energy, gold, last_tick FROM heroes WHERE guild_id = $1", guild.ID()); err != nil {
+	if err := r.db.Select(&heroes, "SELECT id, name, guild_id, level, experience, status, cooldown, health, energy, gold, last_tick FROM heroes WHERE guild_id = $1", guild.ID()); err != nil {
 		return nil, err
 	}
 
 	var heroError error
 	for _, hero := range heroes {
-		hero.Inventory, heroError = restoreHeroInventory(ctx, db, hero.ID)
+		hero.Inventory, heroError = r.restoreHeroInventory(ctx, hero.ID)
 		if heroError != nil {
 			return nil, heroError
 		}
 
-		hero.Action, heroError = restoreHeroAction(ctx, db, hero.ID)
+		hero.Action, heroError = r.restoreHeroAction(ctx, hero.ID)
 		if heroError != nil {
 			return nil, heroError
 		}
@@ -356,9 +355,9 @@ type resourceAux struct {
 	Amount int    `db:"amount"`
 }
 
-func restoreHeroInventory(ctx context.Context, db *postgres.Connection, heroID uuid.UUID) (*game.Inventory, error) {
+func (r *Repository) restoreHeroInventory(ctx context.Context, heroID uuid.UUID) (*game.Inventory, error) {
 	invData := make([]resourceAux, 0)
-	if err := db.Select(&invData, "SELECT name, amount FROM hero_resources WHERE hero_id = $1", heroID); err != nil {
+	if err := r.db.Select(&invData, "SELECT name, amount FROM hero_resources WHERE hero_id = $1", heroID); err != nil {
 		return nil, err
 	}
 
@@ -376,9 +375,9 @@ func restoreHeroInventory(ctx context.Context, db *postgres.Connection, heroID u
 	return inventory, nil
 }
 
-func restoreHeroAction(ctx context.Context, db *postgres.Connection, heroID uuid.UUID) (game.Action, error) {
+func (r *Repository) restoreHeroAction(ctx context.Context, heroID uuid.UUID) (game.Action, error) {
 	actionRaw := []byte("")
-	if err := db.Get(&actionRaw, "SELECT action FROM heroes WHERE id = $1", heroID); err != nil {
+	if err := r.db.Get(&actionRaw, "SELECT action FROM heroes WHERE id = $1", heroID); err != nil {
 		return nil, err
 	}
 
@@ -409,9 +408,9 @@ func restoreHeroAction(ctx context.Context, db *postgres.Connection, heroID uuid
 
 }
 
-func restoreAccountData(ctx context.Context, db *postgres.Connection, accountID uuid.UUID) (*model.AccountActor, error) {
+func (r *Repository) restoreAccountData(ctx context.Context, accountID uuid.UUID) (*model.AccountActor, error) {
 	account := model.AccountActor{}
-	if err := db.Get(&account, "SELECT id, username as name FROM accounts WHERE id = $1", accountID); err != nil {
+	if err := r.db.Get(&account, "SELECT id, username as name FROM accounts WHERE id = $1", accountID); err != nil {
 		return nil, err
 	}
 

@@ -446,7 +446,7 @@ func TestAccountHireCharacter(t *testing.T) {
 }
 
 // func TestAccountExists(t *testing.T) {
-// 	db, err := postgres.New()
+// 	db, err := mock.New()
 // 	require.NoError(t, err)
 
 // 	guild := game.NewGuild("test")

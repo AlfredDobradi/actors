@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
-	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/google/uuid"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -40,8 +40,8 @@ type Actor interface {
 	Snapshot(context.Context) (database.Snapshot, error)
 	RestoreFromSnapshot(context.Context, database.Snapshot) error
 
-	Persist(context.Context, *postgres.Connection) error
-	Restore(context.Context, *postgres.Connection) error
+	Persist(context.Context, database.Store) error
+	Restore(context.Context, database.Store) error
 }
 
 type Replayer interface {
@@ -70,7 +70,8 @@ type ActorHandler struct {
 
 	persister Persister
 
-	db *postgres.Connection
+	db   database.Store
+	repo repository.Repository
 
 	preStartHooks   *HookCollection
 	postStartHooks  *HookCollection
@@ -262,13 +263,13 @@ type System struct {
 	bus      *Bus
 	registry *Registry
 	kv       database.KeyValue
-	store    *postgres.Connection
+	store    database.Store
 
 	//nolint:unused
 	transport any // TODO Add transport layer for external communication
 }
 
-func MustNewSystem(registry *Registry, store *postgres.Connection, kv database.KeyValue) *System {
+func MustNewSystem(registry *Registry, store database.Store, kv database.KeyValue) *System {
 	sys, err := NewSystem(registry, store, kv)
 	if err != nil {
 		slog.Error("Failed to create system", "error", err)
@@ -277,7 +278,7 @@ func MustNewSystem(registry *Registry, store *postgres.Connection, kv database.K
 	return sys
 }
 
-func NewSystem(registry *Registry, store *postgres.Connection, kv database.KeyValue) (*System, error) {
+func NewSystem(registry *Registry, store database.Store, kv database.KeyValue) (*System, error) {
 	if kv == nil {
 		return nil, fmt.Errorf("database store is required")
 	}

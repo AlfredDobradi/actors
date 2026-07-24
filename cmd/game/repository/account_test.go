@@ -1,133 +1,111 @@
 package repository
 
-// func TestCreateAccount(t *testing.T) {
-// 	db := memory.NewStore()
+import (
+	"context"
+	"testing"
 
-// 	req := model.CreateAccountRequest{
-// 		Username: "testuser",
-// 		Email:    "testuser@example.com",
-// 		Password: "password123",
-// 	}
+	"github.com/alfreddobradi/actors/cmd/game/game"
+	"github.com/alfreddobradi/actors/cmd/game/model"
+	"github.com/alfreddobradi/actors/cmd/game/repository/mock"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+)
 
-// 	resp, err := CreateAccount(context.Background(), db, req)
-// 	require.NoError(t, err)
-// 	require.Equal(t, req.Username, resp.Username)
-// 	require.Equal(t, req.Email, resp.Email)
+func TestCreateAccount(t *testing.T) {
+	req := model.CreateAccountRequest{
+		Username: "testuser",
+		Email:    "testuser@example.com",
+		Password: "password123",
+	}
 
-// 	// Verify account is stored in the database
-// 	storedAccount, exists := db.Get(context.Background(), "account:"+resp.ID.String(), false)
-// 	require.True(t, exists)
-// 	require.NotNil(t, storedAccount)
-// }
+	repo := mock.New()
 
-// func TestValidateCredentials(t *testing.T) {
-// 	db := memory.NewStore()
+	resp, err := repo.CreateAccount(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, req.Username, resp.Username)
+	require.Equal(t, req.Email, resp.Email)
 
-// 	// Create a test account
-// 	account := model.Account{
-// 		ID:        uuid.New(),
-// 		Username:  "testuser",
-// 		Email:     "testuser@example.com",
-// 		Password:  "password123",
-// 		CreatedAt: time.Now(),
-// 		UpdatedAt: time.Now(),
-// 		Active:    true,
-// 	}
+	// Verify account is stored in the database
+	storedAccount, storeErr := repo.GetAccount(context.Background(), resp.ID.String())
+	require.NoError(t, storeErr)
+	require.Equal(t, req.Username, storedAccount.Username)
+	require.Equal(t, req.Email, storedAccount.Email)
+}
 
-// 	// Store the test account in the database
-// 	err := db.Set(context.Background(), "account:"+account.ID.String(), account)
-// 	require.NoError(t, err)
+func TestValidateCredentials(t *testing.T) {
+	repo := mock.New()
 
-// 	// Validate credentials
-// 	req := model.CreateSessionRequest{
-// 		Username: "testuser",
-// 		Password: "password123",
-// 	}
+	createReq := model.CreateAccountRequest{
+		Username: "testuser",
+		Email:    "testuser@example.com",
+		Password: "password123",
+	}
 
-// 	validatedAccount, err := ValidateCredentials(context.Background(), db, req)
-// 	require.NoError(t, err)
-// 	require.Equal(t, account.ID, validatedAccount.ID)
-// 	require.Equal(t, account.Username, validatedAccount.Username)
-// 	require.Equal(t, account.Email, validatedAccount.Email)
-// }
+	account, err := repo.CreateAccount(context.Background(), createReq)
+	require.NoError(t, err)
 
-// func TestAccountExists(t *testing.T) {
-// 	db, err := postgres.New()
-// 	require.NoError(t, err)
+	// Validate credentials
+	validateReq := model.CreateSessionRequest{
+		Username: "testuser",
+		Password: "password123",
+	}
 
-// 	id := uuid.MustParse("990014fe-b4d2-49f0-afa7-3118799ec3d4")
-// 	guild := game.NewGuild("test")
-// 	hero := game.NewHero("Test Hero")
+	validatedAccount, err := repo.ValidateCredentials(context.Background(), validateReq)
+	require.NoError(t, err)
+	require.Equal(t, account.ID, validatedAccount.ID)
+	require.Equal(t, account.Username, validatedAccount.Username)
+	require.Equal(t, account.Email, validatedAccount.Email)
+}
 
-// 	{
-// 		tx, err := db.Beginx()
-// 		require.NoError(t, err)
+func TestAccountExists(t *testing.T) {
+	repo := mock.New()
 
-// 		err = persistGuildData(context.Background(), tx, id, guild)
-// 		require.NoError(t, err)
+	id := uuid.MustParse("990014fe-b4d2-49f0-afa7-3118799ec3d4")
+	guild := game.NewGuild("test")
+	hero := game.NewHero("Test Hero")
+	actor := model.AccountActor{
+		ID:       id,
+		Username: "test",
+		Guild:    guild,
+	}
 
-// 		tx.Commit()
-// 	}
+	{
+		err := repo.PersistAccountActor(context.Background(), actor)
+		require.NoError(t, err)
+	}
 
-// 	{
-// 		tx, err := db.Beginx()
-// 		require.NoError(t, err)
+	{
+		actor.Guild.Gold.Add(1000)
+		err := repo.PersistAccountActor(context.Background(), actor)
+		require.NoError(t, err)
+	}
 
-// 		time.Sleep(1 * time.Second)
-// 		guild.Gold.Add(1000)
-// 		err = persistGuildData(context.Background(), tx, id, guild)
-// 		require.NoError(t, err)
+	{
+		actor.Guild.AddHero(&hero)
+		err := repo.PersistAccountActor(context.Background(), actor)
+		require.NoError(t, err)
+	}
 
-// 		tx.Commit()
-// 	}
+	{
+		for range 30 {
+			actor.Guild.ProcessTick(context.Background())
+		}
 
-// 	{
-// 		tx, err := db.Beginx()
-// 		require.NoError(t, err)
+		err := repo.PersistAccountActor(context.Background(), actor)
+		require.NoError(t, err)
+	}
 
-// 		time.Sleep(1 * time.Second)
-// 		guild.AddCharacter(&hero)
-// 		err = persistGuildData(context.Background(), tx, id, guild)
-// 		require.NoError(t, err)
+	{
+		for len(hero.Inventory.Resources()) == 0 {
+			guild.ProcessTick(context.Background())
+		}
 
-// 		tx.Commit()
-// 	}
+		err := repo.PersistAccountActor(context.Background(), actor)
+		require.NoError(t, err)
+	}
 
-// 	{
-// 		tx, err := db.Beginx()
-// 		require.NoError(t, err)
+	restoredActor, err := repo.RestoreAccountActor(context.Background(), id)
+	require.NoError(t, err)
 
-// 		time.Sleep(1 * time.Second)
-
-// 		for range 30 {
-// 			guild.ProcessTick(context.Background())
-// 		}
-
-// 		err = persistGuildData(context.Background(), tx, id, guild)
-// 		require.NoError(t, err)
-
-// 		tx.Commit()
-// 	}
-
-// 	{
-// 		tx, err := db.Beginx()
-// 		require.NoError(t, err)
-
-// 		time.Sleep(1 * time.Second)
-
-// 		for {
-// 			if len(hero.Inventory.Resources()) > 0 {
-// 				break
-// 			}
-
-// 			guild.ProcessTick(context.Background())
-// 		}
-
-// 		err = persistGuildData(context.Background(), tx, id, guild)
-// 		require.NoError(t, err)
-
-// 		tx.Commit()
-// 	}
-
-// 	// spew.Dump(accounts)
-// }
+	require.Equal(t, int64(4000), restoredActor.Guild.Gold.Load())
+}

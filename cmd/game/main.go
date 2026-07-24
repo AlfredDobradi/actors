@@ -13,7 +13,7 @@ import (
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/kv/etcd"
-	"github.com/alfreddobradi/actors/pkg/database/postgres"
+	"github.com/alfreddobradi/actors/pkg/database/store/postgres"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/joho/godotenv"
 )

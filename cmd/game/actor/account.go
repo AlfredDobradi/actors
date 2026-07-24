@@ -13,7 +13,6 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/database"
-	"github.com/alfreddobradi/actors/pkg/database/postgres"
 	sysmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
@@ -104,7 +103,7 @@ func (a *AccountActor) RestoreFromSnapshot(ctx context.Context, snapshot databas
 	return a.replayTicks(ctx, snapshot.Timestamp)
 }
 
-func (a *AccountActor) Persist(ctx context.Context, db *postgres.Connection) error {
+func (a *AccountActor) Persist(ctx context.Context, db database.Store) error {
 	a.mx.Lock()
 	actorData := model.AccountActor{
 		ID:       a.ID,
@@ -113,11 +112,21 @@ func (a *AccountActor) Persist(ctx context.Context, db *postgres.Connection) err
 	}
 	a.mx.Unlock()
 
-	return repository.PersistAccountActor(ctx, db, actorData)
+	repo, err := repository.Get(db)
+	if err != nil {
+		return err
+	}
+
+	return repo.PersistAccountActor(ctx, actorData)
 }
 
-func (a *AccountActor) Restore(ctx context.Context, db *postgres.Connection) error {
-	aux, err := repository.RestoreAccountActor(ctx, db, a.ID)
+func (a *AccountActor) Restore(ctx context.Context, db database.Store) error {
+	repo, err := repository.Get(db)
+	if err != nil {
+		return err
+	}
+
+	aux, err := repo.RestoreAccountActor(ctx, a.ID)
 	if err != nil {
 		return err
 	}
