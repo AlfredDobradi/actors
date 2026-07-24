@@ -6,12 +6,14 @@ import (
 )
 
 type Context struct {
-	DB     database.DB
+	KV     database.KeyValue
+	DB     database.Store
 	System *system.System
 }
 
-func New(db database.DB, sys *system.System) Context {
+func New(kv database.KeyValue, db database.Store, sys *system.System) Context {
 	return Context{
+		KV:     kv,
 		DB:     db,
 		System: sys,
 	}

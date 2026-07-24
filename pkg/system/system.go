@@ -38,6 +38,9 @@ type Actor interface {
 
 	Snapshot(context.Context) (database.Snapshot, error)
 	RestoreFromSnapshot(context.Context, database.Snapshot) error
+
+	Persist(context.Context, database.Store) error
+	Restore(context.Context, database.Store) error
 }
 
 type Replayer interface {
@@ -66,6 +69,9 @@ type ActorHandler struct {
 
 	persister Persister
 
+	db database.Store
+	// repo repository.Repository
+
 	preStartHooks   *HookCollection
 	postStartHooks  *HookCollection
 	poisonedHooks   *HookCollection
@@ -84,7 +90,8 @@ func NewActorHandler(sys *System, actor Actor, opts ...HandlerOpt) *ActorHandler
 		subscriptions: make([]uuid.UUID, 0),
 		publisher:     sys,
 
-		persister: sys.store,
+		persister: sys.kv,
+		db:        sys.store,
 
 		preStartHooks:   NewHookCollection(HookPreStart),
 		postStartHooks:  NewHookCollection(HookPostStart),
@@ -125,7 +132,15 @@ func (h *ActorHandler) Stop() {
 	close(h.stop)
 }
 
-func (h *ActorHandler) Persist(ctx context.Context, db Persister) error {
+func (h *ActorHandler) Persist(ctx context.Context) error {
+	if h.db == nil {
+		return fmt.Errorf("no database handler initialized")
+	}
+
+	return h.actor.Persist(ctx, h.db)
+}
+
+func (h *ActorHandler) Persist_(ctx context.Context, db Persister) error {
 	if db == nil {
 		return fmt.Errorf("no database provided for persistence")
 	}
@@ -147,22 +162,12 @@ func (h *ActorHandler) Persist(ctx context.Context, db Persister) error {
 	return nil
 }
 
-func (h *ActorHandler) Restore(ctx context.Context, db Restorer) error {
-	if db == nil {
+func (h *ActorHandler) Restore(ctx context.Context) error {
+	if h.db == nil {
 		return fmt.Errorf("no database provided for restoration")
 	}
 
-	key := database.SnapshotKey(h.GetKind(), h.GetID())
-	snapshot, err := db.Restore(ctx, key)
-	if err != nil {
-		return fmt.Errorf("no data found in database for key %s: %w", key, err)
-	}
-
-	if err := h.actor.RestoreFromSnapshot(ctx, snapshot); err != nil {
-		return fmt.Errorf("failed to restore actor from snapshot: %w", err)
-	}
-
-	return nil
+	return h.actor.Restore(ctx, h.db)
 }
 
 func (h *ActorHandler) Start(ctx context.Context) {
@@ -173,7 +178,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 	defer close(h.done)
 	defer func() {
 		persistTimer.Stop()
-		if err := h.Persist(ctx, h.persister); err != nil {
+		if err := h.Persist(ctx); err != nil {
 			slog.Warn("Failed to persist actor state on shutdown", "actor_id", h.actor.GetID(), "error", err)
 		}
 
@@ -211,7 +216,7 @@ func (h *ActorHandler) Start(ctx context.Context) {
 			}
 		case <-persistTimer.C:
 			slog.Debug("Attempting to persist actor", "actor_id", h.GetID(), "kind", h.GetKind())
-			if err := h.Persist(ctx, h.persister); err != nil {
+			if err := h.Persist(ctx); err != nil {
 				slog.Warn("Failed to persist actor state", "actor_id", h.actor.GetID(), "error", err)
 			}
 		case <-h.stop:
@@ -256,14 +261,15 @@ type System struct {
 
 	bus      *Bus
 	registry *Registry
-	store    database.DB
+	kv       database.KeyValue
+	store    database.Store
 
 	//nolint:unused
 	transport any // TODO Add transport layer for external communication
 }
 
-func MustNewSystem(registry *Registry, store database.DB) *System {
-	sys, err := NewSystem(registry, store)
+func MustNewSystem(registry *Registry, store database.Store, kv database.KeyValue) *System {
+	sys, err := NewSystem(registry, store, kv)
 	if err != nil {
 		slog.Error("Failed to create system", "error", err)
 		os.Exit(1)
@@ -271,12 +277,12 @@ func MustNewSystem(registry *Registry, store database.DB) *System {
 	return sys
 }
 
-func NewSystem(registry *Registry, store database.DB) (*System, error) {
-	if store == nil {
+func NewSystem(registry *Registry, store database.Store, kv database.KeyValue) (*System, error) {
+	if kv == nil {
 		return nil, fmt.Errorf("database store is required")
 	}
 
-	if err := store.StartSession(context.Background()); err != nil {
+	if err := kv.StartSession(context.Background()); err != nil {
 		slog.Error("Failed to start session", "error", err)
 		return nil, err
 	}
@@ -295,6 +301,7 @@ func NewSystem(registry *Registry, store database.DB) (*System, error) {
 		id:       id,
 		bus:      bus,
 		registry: registry,
+		kv:       kv,
 		store:    store,
 	}
 
@@ -322,10 +329,10 @@ func NewSystem(registry *Registry, store database.DB) (*System, error) {
 
 func (s *System) advertise(ctx context.Context, address string) error {
 	if s.store != nil {
-		if err := s.store.Set(database.WithLease(ctx, true), fmt.Sprintf("system:%s:hostname", s.id), database.ToStringerable(s.name)); err != nil {
+		if err := s.kv.Set(database.WithLease(ctx, true), fmt.Sprintf("system:%s:hostname", s.id), database.ToStringerable(s.name)); err != nil {
 			return err
 		}
-		if err := s.store.Set(database.WithLease(ctx, true), fmt.Sprintf("system:%s:address", s.id), database.ToStringerable(address)); err != nil {
+		if err := s.kv.Set(database.WithLease(ctx, true), fmt.Sprintf("system:%s:address", s.id), database.ToStringerable(address)); err != nil {
 			return err
 		}
 	}
@@ -334,7 +341,7 @@ func (s *System) advertise(ctx context.Context, address string) error {
 
 func (s *System) startKeepalive(ctx context.Context) {
 	if s.store != nil {
-		if err := s.store.KeepAlive(ctx, func(data any) {
+		if err := s.kv.KeepAlive(ctx, func(data any) {
 			switch v := data.(type) {
 			case *clientv3.LeaseKeepAliveResponse:
 				slog.Debug("Received keepalive response", "lease_id", v.ID, "data", fmt.Sprintf("%v", data))
@@ -361,7 +368,7 @@ func (s *System) Shutdown(ctx context.Context) error {
 	}
 
 	if s.store != nil {
-		if err := s.store.EndSession(ctx); err != nil {
+		if err := s.kv.EndSession(ctx); err != nil {
 			slog.Error("Failed to end database session", "error", err)
 			return err
 		}
@@ -409,7 +416,7 @@ func (s *System) Publish(ctx context.Context, sender uuid.UUID, recipient Recipi
 func (s *System) registerActor(ctx context.Context, handler *ActorHandler) error {
 	s.registry.actors[handler.actor.GetID()] = handler
 	if s.store != nil {
-		if err := s.store.Set(database.WithLease(ctx, true), fmt.Sprintf("actor:%s:hostname", handler.actor.GetID()), database.ToStringerable(s.name)); err != nil {
+		if err := s.kv.Set(database.WithLease(ctx, true), fmt.Sprintf("actor:%s:hostname", handler.actor.GetID()), database.ToStringerable(s.name)); err != nil {
 			return err
 		}
 	}
@@ -486,7 +493,7 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 	opts = append(opts, WithSubscription(fmt.Sprintf("kind:%s", actor.GetKind())))
 
 	handler := NewActorHandler(s, actor, opts...)
-	if err := handler.Restore(ctx, s.store); err != nil {
+	if err := handler.Restore(ctx); err != nil {
 		return nil, fmt.Errorf("failed to restore actor of kind %s with ID %s: %w", kind, params.GetID(), err)
 	}
 
@@ -527,7 +534,7 @@ func (s *System) IsActorSpawned(ctx context.Context, actorID uuid.UUID) model.Ac
 
 	// lookup actor in the store
 	key := fmt.Sprintf("actor:%s:hostname", actorID)
-	if _, ok := s.store.Get(ctx, key, false); ok {
+	if _, ok := s.kv.Get(ctx, key, false); ok {
 		return model.ActorStateRemote
 	}
 

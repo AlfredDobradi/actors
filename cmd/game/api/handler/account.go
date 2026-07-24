@@ -17,6 +17,14 @@ import (
 func HandleCreateAccount(s *state.Context) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		span := telemetry.SpanFromRequest(r)
+
+		repo, repoErr := repository.Get(s.DB)
+		if repoErr != nil {
+			slog.Error("Failed to get repository", "error", repoErr)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
 		decoder := json.NewDecoder(r.Body)
 		var httpReq model.CreateAccountRequest
 		if err := decoder.Decode(&httpReq); err != nil {
@@ -25,12 +33,13 @@ func HandleCreateAccount(s *state.Context) func(w http.ResponseWriter, r *http.R
 		}
 		defer closeBody(r.Body)
 
-		if err := repository.CheckAccountExists(span.Context(), s.DB, httpReq); err != nil {
+		if err := repo.CheckAccountExists(span.Context(), httpReq); err != nil {
+			slog.Error("account already exists", "error", err.Error())
 			http.Error(w, "Account already exists", http.StatusConflict)
 			return
 		}
 
-		account, err := repository.CreateAccount(span.Context(), s.DB, httpReq)
+		account, err := repo.CreateAccount(span.Context(), httpReq)
 		if err != nil {
 			http.Error(w, "Failed to create account", http.StatusInternalServerError)
 			return
@@ -46,6 +55,14 @@ func HandleCreateAccount(s *state.Context) func(w http.ResponseWriter, r *http.R
 func HandleCreateSession(s *state.Context) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		span := telemetry.SpanFromRequest(r)
+
+		repo, repoErr := repository.Get(s.DB)
+		if repoErr != nil {
+			slog.Error("Failed to get repository", "error", repoErr)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
 		decoder := json.NewDecoder(r.Body)
 		var httpReq model.CreateSessionRequest
 		if err := decoder.Decode(&httpReq); err != nil {
@@ -54,13 +71,13 @@ func HandleCreateSession(s *state.Context) func(w http.ResponseWriter, r *http.R
 		}
 		defer closeBody(r.Body)
 
-		account, err := repository.ValidateCredentials(span.Context(), s.DB, httpReq)
+		account, err := repo.ValidateCredentials(span.Context(), httpReq)
 		if err != nil {
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 			return
 		}
 
-		sessionID, err := repository.CreateSession(span.Context(), s.DB, account.ID)
+		sessionID, err := repo.CreateSession(span.Context(), account.ID)
 		if err != nil {
 			http.Error(w, "Failed to create session", http.StatusInternalServerError)
 			return
@@ -100,19 +117,26 @@ func HandleDeleteSession(s *state.Context) func(w http.ResponseWriter, r *http.R
 	return func(w http.ResponseWriter, r *http.Request) {
 		span := telemetry.SpanFromRequest(r)
 
+		repo, repoErr := repository.Get(s.DB)
+		if repoErr != nil {
+			slog.Error("Failed to get repository", "error", repoErr)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
 		sessionID, err := paseto.ValidateSessionTokenFromRequest(r.Context(), r)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		if err := repository.ValidateSession(span.Context(), s.DB, sessionID); err != nil {
+		if err := repo.ValidateSession(span.Context(), sessionID); err != nil {
 			slog.Error("Invalid session", "error", err)
 			http.Error(w, "Invalid session", http.StatusBadRequest)
 			return
 		}
 
-		if err := repository.DeleteSession(span.Context(), s.DB, sessionID); err != nil {
+		if err := repo.DeleteSession(span.Context(), sessionID); err != nil {
 			http.Error(w, "Failed to delete session", http.StatusInternalServerError)
 			return
 		}

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/alfreddobradi/actors/pkg/database"
-	"github.com/alfreddobradi/actors/pkg/database/memory"
+	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -37,6 +37,12 @@ func (a *MockBusActor) Snapshot(ctx context.Context) (database.Snapshot, error) 
 	return database.Snapshot{}, nil
 }
 func (a *MockBusActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
+	return nil
+}
+func (m *MockBusActor) Persist(ctx context.Context, db database.Store) error {
+	return nil
+}
+func (m *MockBusActor) Restore(ctx context.Context, db database.Store) error {
 	return nil
 }
 func (a *MockBusActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
@@ -65,7 +71,7 @@ func TestRouting(t *testing.T) {
 	registry.RegisterFactory(mockBusActorKind, mockBusActorFactory)
 
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handlerFoo, err := sys.Spawn(context.Background(), mockBusActorKind)
 	if err != nil {

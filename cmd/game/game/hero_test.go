@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -109,7 +110,7 @@ func TestHeroReplayTicks(t *testing.T) {
 	}{
 		{
 			label:  "Replay 10 ticks on a 15 tick action",
-			ticks:  10,
+			ticks:  -10,
 			action: action,
 			cooldownCheck: func(i int) bool {
 				return i == 5
@@ -118,7 +119,7 @@ func TestHeroReplayTicks(t *testing.T) {
 		},
 		{
 			label:  "Replay 20 ticks on a 15 tick action",
-			ticks:  20,
+			ticks:  -20,
 			action: action,
 			cooldownCheck: func(i int) bool {
 				return i > 0
@@ -134,11 +135,12 @@ func TestHeroReplayTicks(t *testing.T) {
 				Health:   100,
 				Energy:   100,
 				Gold:     1000,
+				LastTick: time.Now().Add(time.Duration(tt.ticks) * time.Second),
 				Action:   tt.action,
 				Cooldown: tt.action.GetCooldown(),
 			}
 
-			err := hero.ReplayTicks(context.Background(), tt.ticks)
+			err := hero.ReplayTicks(context.Background())
 			require.NoError(t, err)
 			require.True(t, tt.cooldownCheck(hero.Cooldown), "Cooldown after replaying ticks did not match expected value")
 			require.Equal(t, tt.expectedExperience, hero.Experience, "Experience after replaying ticks did not match expected value")
@@ -161,7 +163,7 @@ func BenchmarkHeroReplayTicksIncremental(b *testing.B) {
 		Inventory: NewInventory(),
 	}
 
-	ticks := 1000
+	ticks := 20
 
 	for b.Loop() {
 		for range ticks {
@@ -179,13 +181,12 @@ func BenchmarkHeroReplayTicksOptimized(b *testing.B) {
 		Health:    100,
 		Energy:    100,
 		Gold:      1000,
+		LastTick:  time.Now().Add(-20 * time.Second),
 		Action:    nil,
 		Inventory: NewInventory(),
 	}
 
-	ticks := 1000
-
 	for b.Loop() {
-		hero.ReplayTicks(context.Background(), ticks)
+		hero.ReplayTicks(context.Background())
 	}
 }

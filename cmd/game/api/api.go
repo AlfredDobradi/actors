@@ -23,7 +23,7 @@ type Server struct {
 	listener net.Listener
 }
 
-func NewServer(sys *system.System, db database.DB) *Server {
+func NewServer(sys *system.System, kv database.KeyValue, db database.Store) *Server {
 	router := mux.NewRouter()
 
 	listener, err := net.Listen("tcp", config.GetConfig().Addr)
@@ -32,7 +32,7 @@ func NewServer(sys *system.System, db database.DB) *Server {
 		return nil
 	}
 
-	stateCtx := state.New(db, sys)
+	stateCtx := state.New(kv, db, sys)
 
 	s := &Server{
 		Server: &http.Server{

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alfreddobradi/actors/pkg/database"
-	"github.com/alfreddobradi/actors/pkg/database/memory"
+	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -62,6 +62,14 @@ func (m *MockActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
 }
 
 func (m *MockActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
+	return nil
+}
+
+func (m *MockActor) Persist(ctx context.Context, db database.Store) error {
+	return nil
+}
+
+func (m *MockActor) Restore(ctx context.Context, db database.Store) error {
 	return nil
 }
 
@@ -138,7 +146,7 @@ func TestPreStartHookExecution(t *testing.T) {
 		system.WithPreStartHook(tracker.CreateHook(hookPreStart)),
 	)
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -173,7 +181,7 @@ func TestPostStartHookExecution(t *testing.T) {
 		system.WithPostStartHook(tracker.CreateHook(hookPostStart)),
 	)
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -220,7 +228,7 @@ func TestHookExecutionOrder(t *testing.T) {
 
 	registry.RegisterFactory(actor.GetKind(), callback, hooks...)
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -275,7 +283,7 @@ func TestPoisonedHookExecution(t *testing.T) {
 		system.WithPoisonedHook(tracker.CreateHook(hookPoisoned)),
 		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -310,7 +318,7 @@ func TestTerminatedHookExecution(t *testing.T) {
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor },
 		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -350,7 +358,7 @@ func TestCrashHookExecution(t *testing.T) {
 		system.WithCrashHook(tracker.CreateHook("crash")),
 		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -395,7 +403,7 @@ func TestCrashHookNotExecutedOnNormalStop(t *testing.T) {
 		system.WithPoisonedHook(tracker.CreateHook(hookPoisoned)),
 		system.WithTerminatedHook(tracker.CreateHook(hookTerminated)))
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -427,7 +435,7 @@ func TestMultipleHooksOfSameType(t *testing.T) {
 		system.WithTerminatedHook(tracker.CreateHook("terminated2")),
 		system.WithTerminatedHook(tracker.CreateHook("terminated3")))
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,
@@ -462,7 +470,7 @@ func TestMessageProcessingBeforeCrash(t *testing.T) {
 	registry := system.NewRegistry()
 	registry.RegisterFactory(actor.GetKind(), func(ctx context.Context) system.Actor { return actor })
 	db := memory.NewStore()
-	sys := system.MustNewSystem(registry, db)
+	sys := system.MustNewSystem(registry, nil, db)
 
 	handler, err := sys.Spawn(
 		ctx,

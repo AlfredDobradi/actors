@@ -9,6 +9,8 @@ import (
 	"math"
 	"math/rand"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
@@ -31,131 +33,184 @@ func HeroPriceMultiplier(heroAmount int) int64 {
 	return 5
 }
 
-type Tavern struct {
+type Guild struct {
 	mx *sync.RWMutex
 
-	name       string
-	characters map[uuid.UUID]*Hero
+	id     uuid.UUID
+	name   string
+	heroes map[uuid.UUID]*Hero
+	Gold   *atomic.Int64
 }
 
-func NewTavern(name string) *Tavern {
-	return &Tavern{
+type GuildAux struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Gold int64     `json:"gold"`
+}
+
+func NewGuild(name string) *Guild {
+	startingMoney := &atomic.Int64{}
+	startingMoney.Store(3000)
+
+	return &Guild{
 		mx: &sync.RWMutex{},
 
-		name:       name,
-		characters: make(map[uuid.UUID]*Hero),
+		id:     uuid.New(),
+		name:   name,
+		heroes: make(map[uuid.UUID]*Hero),
+		Gold:   startingMoney,
 	}
 }
 
-func (t *Tavern) Name() string {
-	return t.name
+func GuildFromAux(aux GuildAux) *Guild {
+	gold := &atomic.Int64{}
+	gold.Store(aux.Gold)
+
+	return &Guild{
+		mx: &sync.RWMutex{},
+
+		id:     aux.ID,
+		name:   aux.Name,
+		heroes: make(map[uuid.UUID]*Hero),
+		Gold:   gold,
+	}
 }
 
-func (t *Tavern) UnmarshalJSON(data []byte) error {
+func (g *Guild) Name() string {
+	return g.name
+}
+
+func (g *Guild) ID() uuid.UUID {
+	return g.id
+}
+
+func (g *Guild) Heroes() map[uuid.UUID]*Hero {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+	return g.heroes
+}
+
+func (g *Guild) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Name       string             `json:"name"`
 		Characters map[uuid.UUID]Hero `json:"characters"`
+		Gold       int64              `json:"gold"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 
-	if t.mx == nil {
-		t.mx = &sync.RWMutex{}
+	if g.mx == nil {
+		g.mx = &sync.RWMutex{}
 	}
 
-	t.mx.Lock()
-	defer t.mx.Unlock()
+	g.mx.Lock()
+	defer g.mx.Unlock()
 
-	t.characters = make(map[uuid.UUID]*Hero)
+	g.heroes = make(map[uuid.UUID]*Hero)
 	for id, character := range aux.Characters {
-		t.characters[id] = &character
+		g.heroes[id] = &character
 	}
-	t.name = aux.Name
+	g.name = aux.Name
+
+	if g.Gold == nil {
+		g.Gold = &atomic.Int64{}
+	}
+	g.Gold.Store(aux.Gold)
+
 	return nil
 }
 
-func (t *Tavern) MarshalJSON() ([]byte, error) {
-	t.mx.RLock()
-	defer t.mx.RUnlock()
+func (g *Guild) MarshalJSON() ([]byte, error) {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
 
 	characters := make(map[uuid.UUID]Hero)
-	for id, character := range t.characters {
+	for id, character := range g.heroes {
 		characters[id] = *character
+	}
+
+	gold := int64(0)
+	if g.Gold != nil {
+		gold = g.Gold.Load()
 	}
 
 	aux := struct {
 		Name       string             `json:"name"`
 		Characters map[uuid.UUID]Hero `json:"characters"`
+		Gold       int64              `json:"gold"`
 	}{
-		Name:       t.name,
+		Name:       g.name,
 		Characters: characters,
+		Gold:       gold,
 	}
 	return json.Marshal(aux)
 }
 
-func (t *Tavern) AddCharacter(character *Hero) {
-	t.mx.Lock()
-	defer t.mx.Unlock()
-	t.characters[character.ID] = character
+func (g *Guild) AddHero(character *Hero) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+	if g.heroes == nil {
+		g.heroes = make(map[uuid.UUID]*Hero)
+	}
+	g.heroes[character.ID] = character
 }
 
-func (t *Tavern) Characters() map[uuid.UUID]*Hero {
-	t.mx.RLock()
-	defer t.mx.RUnlock()
-	return t.characters
+func (g *Guild) Characters() map[uuid.UUID]*Hero {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+	return g.heroes
 }
 
-func (t *Tavern) GetCharacter(characterID uuid.UUID) (*Hero, bool) {
-	t.mx.RLock()
-	defer t.mx.RUnlock()
-	if character, exists := t.characters[characterID]; exists {
+func (g *Guild) GetCharacter(characterID uuid.UUID) (*Hero, bool) {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+	if character, exists := g.heroes[characterID]; exists {
 		return character, true
 	}
 	return nil, false
 }
 
-func (t *Tavern) ProcessTick(ctx context.Context) {
-	t.mx.RLock()
-	if len(t.characters) == 0 {
-		t.mx.RUnlock()
+func (g *Guild) ProcessTick(ctx context.Context) {
+	g.mx.RLock()
+	if len(g.heroes) == 0 {
+		g.mx.RUnlock()
 		return
 	}
-	t.mx.RUnlock()
+	g.mx.RUnlock()
 
 	wg := sync.WaitGroup{}
-	for id, character := range t.characters {
+	for id, character := range g.heroes {
 		wg.Add(1)
 		go func(id uuid.UUID, character *Hero) {
 			defer wg.Done()
 			slog.Debug("Processing tick for character", "characterID", character.ID, "characterName", character.Name)
 			character.ProcessTick(ctx)
 
-			t.mx.Lock()
-			t.characters[id] = character
-			t.mx.Unlock()
+			g.mx.Lock()
+			g.heroes[id] = character
+			g.mx.Unlock()
 		}(id, character)
 	}
 	wg.Wait()
 }
 
-func (t *Tavern) ReplayTicks(ctx context.Context, ticks int) []error {
+func (g *Guild) ReplayTicks(ctx context.Context) []error {
 	wg := sync.WaitGroup{}
-	errors := make(chan error, len(t.characters))
-	for id, character := range t.characters {
+	errors := make(chan error, len(g.heroes))
+	for id, character := range g.heroes {
 		wg.Add(1)
 		go func(id uuid.UUID, character *Hero) {
 			defer wg.Done()
-			slog.Debug("Replaying ticks for character", "characterID", character.ID, "characterName", character.Name, "ticks", ticks)
 			// There is currently no way of receiving an error from the hero.ProcessTick method, might change in the future.
-			if err := character.ReplayTicks(ctx, ticks); err != nil {
+			if err := character.ReplayTicks(ctx); err != nil {
 				errors <- fmt.Errorf("error replaying ticks for character %s: %w", character.ID, err)
 				return
 			}
 
-			t.mx.Lock()
-			t.characters[id] = character
-			t.mx.Unlock()
+			g.mx.Lock()
+			g.heroes[id] = character
+			g.mx.Unlock()
 		}(id, character)
 	}
 	wg.Wait()
@@ -258,23 +313,31 @@ func (inv *Inventory) GetResource(resource Resource) int {
 	return inv.resources[resource.Name]
 }
 
-type Hero struct {
-	ID         uuid.UUID `json:"id"`
-	Name       string    `json:"name"`
-	Level      int       `json:"level"`
-	Experience int       `json:"experience"`
-	Status     uint8     `json:"status"`
-	Cooldown   int       `json:"cooldown"`
-	Health     int       `json:"health"`
-	Energy     int       `json:"energy"`
-	Gold       int       `json:"gold"`
-	Action     Action    `json:"-"`
+func (inv *Inventory) Resources() map[string]int {
+	inv.mx.Lock()
+	defer inv.mx.Unlock()
+	return inv.resources
+}
 
-	Inventory *Inventory `json:"inventory"`
+type Hero struct {
+	ID         uuid.UUID `json:"id" db:"id"`
+	Name       string    `json:"name" db:"name"`
+	GuildID    uuid.UUID `json:"guild_id" db:"guild_id"`
+	Level      int       `json:"level" db:"level"`
+	Experience int       `json:"experience" db:"experience"`
+	Status     uint8     `json:"status" db:"status"`
+	Cooldown   int       `json:"cooldown" db:"cooldown"`
+	Health     int       `json:"health" db:"health"`
+	Energy     int       `json:"energy" db:"energy"`
+	Gold       int       `json:"gold" db:"gold"`
+	LastTick   time.Time `json:"last_tick" db:"last_tick"`
+	Action     Action    `json:"-" db:"-"`
+
+	Inventory *Inventory `json:"inventory" db:"inventory"`
 }
 
 func (c Hero) MarshalJSON() ([]byte, error) {
-	raw := make(map[string]interface{})
+	raw := make(map[string]any)
 
 	raw["id"] = c.ID
 	raw["name"] = c.Name
@@ -291,7 +354,7 @@ func (c Hero) MarshalJSON() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		var actionData map[string]interface{}
+		var actionData map[string]any
 		if err := json.Unmarshal(rawAction, &actionData); err != nil {
 			return nil, err
 		}
@@ -349,7 +412,7 @@ func (c *Hero) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("action data missing _name field")
 		}
 
-		decodedAction, exists := actionMap[actionName]
+		decodedAction, exists := ActionMap[actionName]
 		if !exists {
 			return fmt.Errorf("unknown action type: %s", actionName)
 		}
@@ -377,6 +440,7 @@ func NewHero(name string) Hero {
 		Health:     100,
 		Energy:     100,
 		Gold:       100,
+		LastTick:   time.Now(), // Not really a tick but if we're replaying and they've never done anything we need a starting point
 		Inventory:  NewInventory(),
 		Action:     &IdleAction{},
 	}
@@ -393,6 +457,10 @@ func (c *Hero) GainExperience(amount int) {
 func (c *Hero) ProcessTick(ctx context.Context) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
+
+	defer func() {
+		c.LastTick = time.Now()
+	}()
 
 	if c.Action == nil || c.Action.GetName() == ActionNameIdle {
 		c.Action = c.WhatNext()
@@ -412,10 +480,12 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 	c.Cooldown = 0
 }
 
-func (c *Hero) ReplayTicks(ctx context.Context, ticks int) error {
-	remainingTicks := ticks
+func (c *Hero) ReplayTicks(ctx context.Context) error {
+	secondsSinceTime := time.Since(c.LastTick).Seconds()
+	ticksSinceTime := int(math.Floor(secondsSinceTime / float64(TickRate)))
+	remainingTicks := ticksSinceTime
 
-	slog.Debug("Starting to replay ticks", "characterID", c.ID, "characterName", c.Name, "ticksToReplay", ticks)
+	slog.Debug("Starting to replay ticks", "characterID", c.ID, "characterName", c.Name, "ticksToReplay", remainingTicks)
 
 	actions := make([]string, 0)
 	if c.Action != nil {
@@ -443,7 +513,7 @@ func (c *Hero) ReplayTicks(ctx context.Context, ticks int) error {
 		}
 	}
 
-	slog.Debug("Finished replaying ticks", "characterID", c.ID, "characterName", c.Name, "ticksReplayed", ticks, "actions", actions)
+	slog.Debug("Finished replaying ticks", "characterID", c.ID, "characterName", c.Name, "ticksReplayed", ticksSinceTime, "actions", actions)
 
 	return nil
 }
