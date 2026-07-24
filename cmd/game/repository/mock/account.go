@@ -48,11 +48,6 @@ func (r *Repository) CreateAccount(ctx context.Context, req model.CreateAccountR
 		Active:    true,
 	}
 
-	type Aux struct {
-		Username string `db:"username"`
-		Email    string `db:"email"`
-	}
-
 	if existsErr := r.CheckAccountExists(ctx, req); existsErr != nil {
 		return model.CreateAccountResponse{}, existsErr
 	}

@@ -11,11 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testUser     string = "testUser"
+	testPassword string = "password123"
+)
+
 func TestCreateAccount(t *testing.T) {
 	req := model.CreateAccountRequest{
-		Username: "testuser",
+		Username: testUser,
 		Email:    "testuser@example.com",
-		Password: "password123",
+		Password: testPassword,
 	}
 
 	repo := mock.New()
@@ -36,9 +41,9 @@ func TestValidateCredentials(t *testing.T) {
 	repo := mock.New()
 
 	createReq := model.CreateAccountRequest{
-		Username: "testuser",
+		Username: testUser,
 		Email:    "testuser@example.com",
-		Password: "password123",
+		Password: testPassword,
 	}
 
 	account, err := repo.CreateAccount(context.Background(), createReq)
@@ -46,8 +51,8 @@ func TestValidateCredentials(t *testing.T) {
 
 	// Validate credentials
 	validateReq := model.CreateSessionRequest{
-		Username: "testuser",
-		Password: "password123",
+		Username: testUser,
+		Password: testPassword,
 	}
 
 	validatedAccount, err := repo.ValidateCredentials(context.Background(), validateReq)

@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/model"
@@ -70,8 +69,8 @@ type ActorHandler struct {
 
 	persister Persister
 
-	db   database.Store
-	repo repository.Repository
+	db database.Store
+	// repo repository.Repository
 
 	preStartHooks   *HookCollection
 	postStartHooks  *HookCollection
