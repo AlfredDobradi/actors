@@ -4,3 +4,14 @@ logging:
   level: info
   format: json
   add_source: false
+database:
+  host: 127.0.0.1
+  user: postgres
+  password: testing
+  port: 55432
+  dbname: postgres
+kv:
+  hosts:
+    - "localhost:22379"
+    - "localhost:22479"
+    - "localhost:22579"

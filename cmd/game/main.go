@@ -33,11 +33,13 @@ func main() {
 	registry := system.NewRegistry()
 	actor.InitFactories(registry)
 
+	cfg := config.GetConfig()
+
 	var (
 		kv    database.KeyValue
 		kvErr error
 	)
-	if kv, kvErr = etcd.New([]string{"localhost:22379", "localhost:22479", "localhost:22579"}); kvErr != nil {
+	if kv, kvErr = etcd.New(cfg.KV.Hosts); kvErr != nil {
 		slog.Error("Failed to initialize key-value store", "error", kvErr)
 		os.Exit(1)
 	}
@@ -46,7 +48,7 @@ func main() {
 		db    *postgres.Connection
 		dbErr error
 	)
-	if db, dbErr = postgres.New(); dbErr != nil {
+	if db, dbErr = postgres.New(cfg.Database.DSN()); dbErr != nil {
 		slog.Error("Failed to initialize database", "error", dbErr)
 		os.Exit(1)
 	}
