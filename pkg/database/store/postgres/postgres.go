@@ -10,8 +10,8 @@ type Connection struct {
 	*sqlx.DB
 }
 
-func New() (*Connection, error) {
-	c, err := sqlx.Connect("postgres", "host=host.docker.internal user=postgres password=testing dbname=postgres sslmode=disable port=55432")
+func New(dsn string) (*Connection, error) {
+	c, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
 		return nil, err
 	}
