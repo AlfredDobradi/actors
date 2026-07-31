@@ -54,3 +54,5 @@ type HireCharacterResponse struct {
 type RequestError struct {
 	Err error
 }
+
+type RefreshConfig struct{}

@@ -5,15 +5,18 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/alfreddobradi/actors/cmd/game/actor"
 	"github.com/alfreddobradi/actors/cmd/game/api"
 	"github.com/alfreddobradi/actors/cmd/game/logging"
+	"github.com/alfreddobradi/actors/cmd/game/repository"
 	"github.com/alfreddobradi/actors/pkg/config"
 	"github.com/alfreddobradi/actors/pkg/database"
 	"github.com/alfreddobradi/actors/pkg/database/kv/etcd"
 	"github.com/alfreddobradi/actors/pkg/database/store/postgres"
+	"github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/joho/godotenv"
 )
@@ -66,13 +69,25 @@ func main() {
 
 	go apiServer.Start() //nolint
 
-	handlerTicker, err := sys.Spawn(ctx, "TickerActor")
+	repo, err := repository.Get(db)
 	if err != nil {
-		slog.Error("Failed to spawn actor", "error", err)
-		return
+		slog.Error("Failed to get repository instance", "error", err)
+	}
+	spawnContext := context.WithValue(ctx, model.ContextKeyDBHandle, repo)
+
+	actorsToSpawn := []string{"TickerActor", "KeeperActor"}
+	handlers := make(map[string]*system.ActorHandler)
+	for _, kind := range actorsToSpawn {
+		handler, err := sys.Spawn(spawnContext, kind)
+		if err != nil {
+			slog.Error("Failed to spawn actor", "kind", kind, "error", err)
+			return
+		}
+
+		handlers[kind] = handler
 	}
 
-	slog.Info("Actors spawned successfully", "ticker_actor_id", handlerTicker.GetActor().GetID())
+	slog.Info("Actors spawned successfully", "kinds", strings.Join(actorsToSpawn, ", "))
 
 	// Wait for interrupt signal (Ctrl+C)
 	sigChan := make(chan os.Signal, 1)

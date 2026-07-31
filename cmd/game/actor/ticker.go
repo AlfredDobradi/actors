@@ -28,47 +28,47 @@ func NewTick() Tick {
 	}
 }
 
-func (h *TickerActor) GetID() uuid.UUID {
-	return h.ID
+func (t *TickerActor) GetID() uuid.UUID {
+	return t.ID
 }
 
-func (h *TickerActor) GetKind() string {
+func (t *TickerActor) GetKind() string {
 	return "TickerActor"
 }
 
-func (h *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
+func (t *TickerActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
 	// this actor should never receive any messages
 	return nil
 }
 
-func (h *TickerActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
+func (t *TickerActor) Snapshot(ctx context.Context) (database.Snapshot, error) {
 	// noop - this actor doesn't have any state to persist
 	return database.Snapshot{}, nil
 }
 
-func (h *TickerActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
+func (t *TickerActor) RestoreFromSnapshot(ctx context.Context, snapshot database.Snapshot) error {
 	// noop - this actor doesn't have any state to restore
 	return nil
 }
 
-func (m *TickerActor) Persist(ctx context.Context, db database.Store) error {
+func (t *TickerActor) Persist(ctx context.Context, db database.Store) error {
 	return nil
 }
 
-func (m *TickerActor) Restore(ctx context.Context, db database.Store) error {
+func (t *TickerActor) Restore(ctx context.Context, db database.Store) error {
 	return nil
 }
 
-func (h *TickerActor) tickCallback(ctx context.Context) error {
+func (t *TickerActor) tickCallback(ctx context.Context) error {
 	spanID := uuid.New()
 	sctx := context.WithValue(ctx, model.ContextKeySpanID, spanID)
 
-	slog.Debug("Sending tick message", "span_id", spanID, "actorID", h.GetID())
+	slog.Debug("Sending tick message", "span_id", spanID, "actorID", t.GetID())
 
-	_, err := h.sendCallback(
+	_, err := t.sendCallback(
 		sctx,
 		false, // we don't expect response to ticks
-		h.GetID(),
+		t.GetID(),
 		system.Recipient{Kind: system.RecipientKindTopic, Subject: "ticks"},
 		NewTick(),
 	)
@@ -79,25 +79,25 @@ func (h *TickerActor) tickCallback(ctx context.Context) error {
 	return nil
 }
 
-func (h *TickerActor) Start(ctx context.Context) {
+func (t *TickerActor) Start(ctx context.Context) {
 	go func() {
 		for {
 			select {
-			case <-h.timer.C:
-				if err := h.tickCallback(ctx); err != nil {
-					slog.Error("Failed to send tick message", "actorID", h.GetID(), "error", err)
+			case <-t.timer.C:
+				if err := t.tickCallback(ctx); err != nil {
+					slog.Error("Failed to send tick message", "actorID", t.GetID(), "error", err)
 				}
 			case <-ctx.Done():
-				h.timer.Stop()
+				t.timer.Stop()
 				return
 			}
 		}
 	}()
 }
 
-func (h *TickerActor) Stop(ctx context.Context) error {
-	slog.Debug("Stopping ticker actor", "actorID", h.GetID())
-	h.timer.Stop()
+func (t *TickerActor) Stop(ctx context.Context) error {
+	slog.Debug("Stopping ticker actor", "actorID", t.GetID())
+	t.timer.Stop()
 	return nil
 }
 

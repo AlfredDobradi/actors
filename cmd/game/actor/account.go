@@ -64,6 +64,8 @@ func (a *AccountActor) routeMessage(msg *system.Message) routeHandler {
 		return a.getCharacter
 	case model.HireCharacterRequest:
 		return a.hireCharacter
+	case model.RefreshConfig:
+		return a.refreshConfig
 	default:
 		return nil
 	}
@@ -342,6 +344,11 @@ func (a *AccountActor) getCharacters(ctx context.Context, msg *system.Message) s
 		return NewErrResponseFailed(err)
 	}
 
+	return nil
+}
+
+func (a *AccountActor) refreshConfig(ctx context.Context, msg *system.Message) system.HandleError {
+	// db := database.
 	return nil
 }
 

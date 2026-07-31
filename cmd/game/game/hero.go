@@ -36,10 +36,21 @@ func HeroPriceMultiplier(heroAmount int) int64 {
 type Guild struct {
 	mx *sync.RWMutex
 
-	id     uuid.UUID
-	name   string
-	heroes map[uuid.UUID]*Hero
-	Gold   *atomic.Int64
+	id       uuid.UUID
+	name     string
+	settings *GuildConfig
+	heroes   map[uuid.UUID]*Hero
+	Gold     *atomic.Int64
+}
+
+type GuildConfig struct {
+	TaxRate float64 `yaml:"tax_rate"`
+}
+
+func NewGuildConfig() *GuildConfig {
+	return &GuildConfig{
+		TaxRate: 0,
+	}
 }
 
 type GuildAux struct {
@@ -55,24 +66,26 @@ func NewGuild(name string) *Guild {
 	return &Guild{
 		mx: &sync.RWMutex{},
 
-		id:     uuid.New(),
-		name:   name,
-		heroes: make(map[uuid.UUID]*Hero),
-		Gold:   startingMoney,
+		id:       uuid.New(),
+		name:     name,
+		heroes:   make(map[uuid.UUID]*Hero),
+		settings: NewGuildConfig(),
+		Gold:     startingMoney,
 	}
 }
 
-func GuildFromAux(aux GuildAux) *Guild {
+func GuildFromAux(aux GuildAux, config *GuildConfig) *Guild {
 	gold := &atomic.Int64{}
 	gold.Store(aux.Gold)
 
 	return &Guild{
 		mx: &sync.RWMutex{},
 
-		id:     aux.ID,
-		name:   aux.Name,
-		heroes: make(map[uuid.UUID]*Hero),
-		Gold:   gold,
+		id:       aux.ID,
+		name:     aux.Name,
+		settings: config,
+		heroes:   make(map[uuid.UUID]*Hero),
+		Gold:     gold,
 	}
 }
 
@@ -82,6 +95,14 @@ func (g *Guild) Name() string {
 
 func (g *Guild) ID() uuid.UUID {
 	return g.id
+}
+
+func (g *Guild) Settings() *GuildConfig {
+	return g.settings
+}
+
+func (g *Guild) SetSettings(newSettings *GuildConfig) {
+	g.settings = newSettings
 }
 
 func (g *Guild) Heroes() map[uuid.UUID]*Hero {
