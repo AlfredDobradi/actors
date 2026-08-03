@@ -196,11 +196,11 @@ func (r *Repository) GetAccount(ctx context.Context, accountID string) (model.Ac
 	return account, nil
 }
 
-func (r *Repository) GetGuildConfig(ctx context.Context, guildID string) (*game.GuildConfig, error) {
+func (r *Repository) GetGuildConfig(ctx context.Context, accountID uuid.UUID) (*game.GuildConfig, error) {
 	settings := game.GuildConfig{}
-	if err := r.db.Select(&settings, "SELECT guild_id, config, created_at, updated_at FROM guild_config WHERE guild_id = $1", guildID); err != nil {
+	if err := r.db.Select(&settings, "SELECT guild_id, config, created_at, updated_at FROM guild_config WHERE account_id = $1", accountID); err != nil {
 		if err.Error() != "sql: no rows in result set" {
-			slog.Warn("no guild config found, creating one with default values", "guild_id", guildID)
+			slog.Warn("no guild config found, creating one with default values", "account_id", accountID)
 			return nil, err
 		}
 
@@ -355,7 +355,7 @@ func (r *Repository) restoreGuildData(ctx context.Context, accountID uuid.UUID) 
 		return nil, err
 	}
 
-	settings, configErr := r.GetGuildConfig(ctx, guildAux.ID.String())
+	settings, configErr := r.GetGuildConfig(ctx, accountID)
 	if configErr != nil {
 		return nil, configErr
 	}

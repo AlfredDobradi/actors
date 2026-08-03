@@ -112,5 +112,5 @@ func TestAccountExists(t *testing.T) {
 	restoredActor, err := repo.RestoreAccountActor(context.Background(), id)
 	require.NoError(t, err)
 
-	require.Equal(t, int64(4000), restoredActor.Guild.Gold.Load())
+	require.Equal(t, float64(4000), restoredActor.Guild.Gold.Load())
 }

@@ -28,6 +28,8 @@ type routeHandler func(ctx context.Context, msg *system.Message) system.HandleEr
 type AccountActor struct {
 	mx *sync.Mutex
 
+	sendCallback system.SenderFunc
+
 	ID       uuid.UUID
 	Username string
 	Guild    *game.Guild
@@ -246,14 +248,14 @@ func (a *AccountActor) hireCharacter(ctx context.Context, msg *system.Message) s
 	slog.Info("Received request to hire character", "actor_id", a.GetID(), "message_id", msg.GetID())
 
 	// check whether account has enough gold
-	cost := game.HeroPriceMultiplier(len(a.Guild.Characters())) * 1000
+	cost := float64(game.HeroPriceMultiplier(len(a.Guild.Characters())) * 1000)
 	gold := a.Guild.Gold.Load()
 
 	if cost > gold {
-		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %d, need %d", gold, cost)}); err != nil {
+		if err := msg.Respond(a.ID, model.HireCharacterResponse{OK: false, Error: fmt.Sprintf("not enough gold: have %f, need %f", gold, cost)}); err != nil {
 			slog.Error("failed to send response", "error", err)
 		}
-		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %d, need %d", gold, cost))
+		return NewAccountError(fmt.Errorf("not enough gold to hire character: have %f, need %f", gold, cost))
 	} else {
 		a.Guild.Gold.Add(-cost)
 	}
@@ -348,7 +350,20 @@ func (a *AccountActor) getCharacters(ctx context.Context, msg *system.Message) s
 }
 
 func (a *AccountActor) refreshConfig(ctx context.Context, msg *system.Message) system.HandleError {
-	// db := database.
+	_, err := a.sendCallback(
+		context.Background(),
+		false,
+		a.ID,
+		system.Recipient{Kind: system.RecipientKindTopic, Subject: "keeper"},
+		GetGuildConfigRequest{
+			AccountID: a.ID,
+		},
+	)
+
+	if err != nil {
+		return ErrKeeperDBError{Err: err}
+	}
+
 	return nil
 }
 
@@ -376,10 +391,11 @@ func accountActorFactory(ctx context.Context) system.Actor {
 	}
 
 	a := &AccountActor{
-		mx:       &sync.Mutex{},
-		ID:       accountParams.ID,
-		Username: accountParams.Name,
-		Guild:    nil,
+		mx:           &sync.Mutex{},
+		sendCallback: ctx.Value(sysmodel.ContextKeySenderFn).(system.SenderFunc),
+		ID:           accountParams.ID,
+		Username:     accountParams.Name,
+		Guild:        nil,
 	}
 
 	return a

@@ -9,7 +9,6 @@ import (
 	"math"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/alfreddobradi/actors/pkg/telemetry"
@@ -33,6 +32,45 @@ func HeroPriceMultiplier(heroAmount int) int64 {
 	return 5
 }
 
+type Receipt struct {
+	Gross float64
+	Tax   float64
+	Net   float64
+}
+
+type GoldStash struct {
+	mx     *sync.Mutex
+	amount float64
+}
+
+func NewGoldStash(amount float64) GoldStash {
+	return GoldStash{
+		mx:     &sync.Mutex{},
+		amount: amount,
+	}
+}
+
+func (s *GoldStash) Store(amount float64) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.amount = amount
+}
+
+func (s *GoldStash) Load() float64 {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	return s.amount
+}
+
+func (s *GoldStash) Add(amount float64) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.amount += amount
+}
+
 type Guild struct {
 	mx *sync.RWMutex
 
@@ -40,7 +78,7 @@ type Guild struct {
 	name     string
 	settings *GuildConfig
 	heroes   map[uuid.UUID]*Hero
-	Gold     *atomic.Int64
+	Gold     *GoldStash
 }
 
 type GuildConfig struct {
@@ -56,12 +94,11 @@ func NewGuildConfig() *GuildConfig {
 type GuildAux struct {
 	ID   uuid.UUID `json:"id"`
 	Name string    `json:"name"`
-	Gold int64     `json:"gold"`
+	Gold float64   `json:"gold"`
 }
 
 func NewGuild(name string) *Guild {
-	startingMoney := &atomic.Int64{}
-	startingMoney.Store(3000)
+	stash := NewGoldStash(3000)
 
 	return &Guild{
 		mx: &sync.RWMutex{},
@@ -70,13 +107,12 @@ func NewGuild(name string) *Guild {
 		name:     name,
 		heroes:   make(map[uuid.UUID]*Hero),
 		settings: NewGuildConfig(),
-		Gold:     startingMoney,
+		Gold:     &stash,
 	}
 }
 
 func GuildFromAux(aux GuildAux, config *GuildConfig) *Guild {
-	gold := &atomic.Int64{}
-	gold.Store(aux.Gold)
+	stash := NewGoldStash(aux.Gold)
 
 	return &Guild{
 		mx: &sync.RWMutex{},
@@ -85,7 +121,7 @@ func GuildFromAux(aux GuildAux, config *GuildConfig) *Guild {
 		name:     aux.Name,
 		settings: config,
 		heroes:   make(map[uuid.UUID]*Hero),
-		Gold:     gold,
+		Gold:     &stash,
 	}
 }
 
@@ -115,7 +151,7 @@ func (g *Guild) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Name       string             `json:"name"`
 		Characters map[uuid.UUID]Hero `json:"characters"`
-		Gold       int64              `json:"gold"`
+		Gold       float64            `json:"gold"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -135,9 +171,10 @@ func (g *Guild) UnmarshalJSON(data []byte) error {
 	g.name = aux.Name
 
 	if g.Gold == nil {
-		g.Gold = &atomic.Int64{}
+		stash := NewGoldStash(0)
+		g.Gold = &stash
 	}
-	g.Gold.Store(aux.Gold)
+	g.Gold.Store(float64(aux.Gold))
 
 	return nil
 }
@@ -151,7 +188,7 @@ func (g *Guild) MarshalJSON() ([]byte, error) {
 		characters[id] = *character
 	}
 
-	gold := int64(0)
+	gold := float64(0)
 	if g.Gold != nil {
 		gold = g.Gold.Load()
 	}
@@ -159,7 +196,7 @@ func (g *Guild) MarshalJSON() ([]byte, error) {
 	aux := struct {
 		Name       string             `json:"name"`
 		Characters map[uuid.UUID]Hero `json:"characters"`
-		Gold       int64              `json:"gold"`
+		Gold       float64            `json:"gold"`
 	}{
 		Name:       g.name,
 		Characters: characters,
@@ -206,7 +243,7 @@ func (g *Guild) ProcessTick(ctx context.Context) {
 		go func(id uuid.UUID, character *Hero) {
 			defer wg.Done()
 			slog.Debug("Processing tick for character", "characterID", character.ID, "characterName", character.Name)
-			character.ProcessTick(ctx)
+			character.ProcessTick(ctx, g)
 
 			g.mx.Lock()
 			g.heroes[id] = character
@@ -224,7 +261,7 @@ func (g *Guild) ReplayTicks(ctx context.Context) []error {
 		go func(id uuid.UUID, character *Hero) {
 			defer wg.Done()
 			// There is currently no way of receiving an error from the hero.ProcessTick method, might change in the future.
-			if err := character.ReplayTicks(ctx); err != nil {
+			if err := character.ReplayTicks(ctx, g); err != nil {
 				errors <- fmt.Errorf("error replaying ticks for character %s: %w", character.ID, err)
 				return
 			}
@@ -350,7 +387,7 @@ type Hero struct {
 	Cooldown   int       `json:"cooldown" db:"cooldown"`
 	Health     int       `json:"health" db:"health"`
 	Energy     int       `json:"energy" db:"energy"`
-	Gold       int       `json:"gold" db:"gold"`
+	Gold       float64   `json:"gold" db:"gold"`
 	LastTick   time.Time `json:"last_tick" db:"last_tick"`
 	Action     Action    `json:"-" db:"-"`
 
@@ -398,7 +435,7 @@ func (c *Hero) UnmarshalJSON(data []byte) error {
 		Cooldown   int
 		Health     int
 		Energy     int
-		Gold       int
+		Gold       float64
 		Action     json.RawMessage
 		Inventory  Inventory
 	}
@@ -468,14 +505,33 @@ func NewHero(name string) Hero {
 }
 
 func (c *Hero) GainExperience(amount int) {
-	slog.Debug("Character is gaining experience", "characterID", c.ID, "characterName", c.Name, "amount", amount, "currentExperience", c.Experience)
+	slog.Debug("character is gaining experience", "character_id", c.ID, "characterName", c.Name, "amount", amount, "currentExperience", c.Experience)
 	c.Experience += amount
 	for i := 0; c.Experience >= xpForLevel(i+1); i++ {
 		c.Level = i + 1
 	}
 }
 
-func (c *Hero) ProcessTick(ctx context.Context) {
+func (c *Hero) GainGold(amount float64, taxRate float64) Receipt {
+	slog.Debug("character is gaining money", "character_id", c.ID, "character_name", c.Name, "amount", amount, "tax_rate", taxRate, "current_gold", c.Gold)
+
+	var tax float64 = 0
+	// Don't tax losing money
+	if amount > 0 {
+		tax = amount * (taxRate / 100)
+	}
+	netAmount := amount - tax
+
+	c.Gold += netAmount
+
+	return Receipt{
+		Gross: amount,
+		Tax:   tax,
+		Net:   netAmount,
+	}
+}
+
+func (c *Hero) ProcessTick(ctx context.Context, g *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", c.ID, "characterName", c.Name)
 
@@ -496,12 +552,12 @@ func (c *Hero) ProcessTick(ctx context.Context) {
 		return
 	}
 
-	c.Action.Execute(ctx, c)
+	c.Action.Execute(ctx, c, g)
 	c.Action = &IdleAction{}
 	c.Cooldown = 0
 }
 
-func (c *Hero) ReplayTicks(ctx context.Context) error {
+func (c *Hero) ReplayTicks(ctx context.Context, g *Guild) error {
 	secondsSinceTime := time.Since(c.LastTick).Seconds()
 	ticksSinceTime := int(math.Floor(secondsSinceTime / float64(TickRate)))
 	remainingTicks := ticksSinceTime
@@ -524,7 +580,7 @@ func (c *Hero) ReplayTicks(ctx context.Context) error {
 		} else {
 			if c.Action != nil {
 				slog.Debug("cooldown expired and there is an action to execute", "action", c.Action.GetName())
-				c.Action.Execute(ctx, c)
+				c.Action.Execute(ctx, c, g)
 				remainingTicks--
 				slog.Debug("after executing action", "remaining", remainingTicks)
 			}

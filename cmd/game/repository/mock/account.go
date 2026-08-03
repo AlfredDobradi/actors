@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ var (
 	ErrSessionNotFound      = fmt.Errorf("session not found")
 	ErrSessionRevoked       = fmt.Errorf("session has been revoked")
 	ErrAccountActorNotFound = fmt.Errorf("account actor not found")
+	ErrGuildConfigNotFound  = fmt.Errorf("guild config not found")
 )
 
 func (r *Repository) CheckAccountExists(ctx context.Context, req model.CreateAccountRequest) error {
@@ -189,6 +191,18 @@ func (r *Repository) GetSessionsByAccountID(ctx context.Context, accountID strin
 	}
 
 	return sessions, nil
+}
+
+func (r *Repository) GetGuildConfig(ctx context.Context, accountID uuid.UUID) (*game.GuildConfig, error) {
+	span := telemetry.SpanFromContext(ctx)
+	span.GetLogger().Info("Retrieving guild config for account", "account_id", accountID)
+
+	c, ok := r.guildConfigs[accountID]
+	if !ok {
+		return nil, ErrGuildConfigNotFound
+	}
+
+	return &c, nil
 }
 
 func (r *Repository) PersistAccountActor(ctx context.Context, account model.AccountActor) error {

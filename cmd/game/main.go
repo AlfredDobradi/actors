@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/alfreddobradi/actors/cmd/game/actor"
@@ -75,10 +74,15 @@ func main() {
 	}
 	spawnContext := context.WithValue(ctx, model.ContextKeyDBHandle, repo)
 
-	actorsToSpawn := []string{"TickerActor", "KeeperActor"}
+	actorsToSpawn := map[string][]system.HandlerOpt{
+		"TickerActor": {},
+		"KeeperActor": {
+			system.WithSubscription("keeper"),
+		},
+	}
 	handlers := make(map[string]*system.ActorHandler)
-	for _, kind := range actorsToSpawn {
-		handler, err := sys.Spawn(spawnContext, kind)
+	for kind, opts := range actorsToSpawn {
+		handler, err := sys.Spawn(spawnContext, kind, opts...)
 		if err != nil {
 			slog.Error("Failed to spawn actor", "kind", kind, "error", err)
 			return
@@ -87,7 +91,7 @@ func main() {
 		handlers[kind] = handler
 	}
 
-	slog.Info("Actors spawned successfully", "kinds", strings.Join(actorsToSpawn, ", "))
+	slog.Info("Actors spawned successfully")
 
 	// Wait for interrupt signal (Ctrl+C)
 	sigChan := make(chan os.Signal, 1)

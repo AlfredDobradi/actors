@@ -22,7 +22,7 @@ type CharacterDetails struct {
 	Experience int       `json:"experience"`
 	Health     int       `json:"health"`
 	Energy     int       `json:"energy"`
-	Gold       int       `json:"gold"`
+	Gold       float64   `json:"gold"`
 	Progress   int       `json:"progress"`
 	Action     string    `json:"action"`
 }

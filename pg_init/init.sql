@@ -45,7 +45,7 @@ CREATE TABLE heroes (
     health INT,
     energy INT,
     experience INT,
-    gold INT,
+    gold FLOAT,
     last_tick TIMESTAMP DEFAULT NULL,
     status INT,
     action JSON,

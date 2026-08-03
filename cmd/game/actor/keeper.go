@@ -28,7 +28,10 @@ func (k *KeeperActor) GetKind() string {
 }
 
 func (k *KeeperActor) HandleMessage(ctx context.Context, msg *system.Message) system.HandleError {
-	// this actor should never receive any messages
+	switch m := msg.Payload.(type) {
+	case GetGuildConfigRequest:
+		slog.Info("received task to get guild config", "account_id", m.AccountID)
+	}
 	return nil
 }
 
@@ -82,3 +85,17 @@ func keeperActorFactory(ctx context.Context) system.Actor {
 		sendCallback: ctx.Value(model.ContextKeySenderFn).(system.SenderFunc),
 	}
 }
+
+type QueryRequest interface {
+	IsQuery()
+}
+
+type GetGuildConfigRequest struct {
+	AccountID uuid.UUID
+}
+
+func (g GetGuildConfigRequest) IsQuery() {}
+
+// func (k *KeeperActor) getGuildConfig(ctx context.Context, accountID uuid.UUID) (game.GuildConfig, error) {
+// 	k.handle.
+// }

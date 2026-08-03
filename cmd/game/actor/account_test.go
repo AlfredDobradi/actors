@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/alfreddobradi/actors/cmd/game/game"
@@ -166,8 +165,7 @@ func TestAccountActorFactory(t *testing.T) {
 // }
 
 func TestAccountJSONRoundTrip(t *testing.T) {
-	gold := &atomic.Int64{}
-	gold.Store(1000)
+	gold := game.NewGoldStash(1000)
 
 	testHeroWithAction := &game.Hero{
 		ID:   uuid.New(),
@@ -236,7 +234,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 		tf := func(t *testing.T) {
 			tg := tt.guild
 			if tg != nil {
-				tg.Gold = gold
+				tg.Gold = &gold
 			}
 
 			account := &AccountActor{
@@ -276,7 +274,7 @@ func TestAccountJSONRoundTrip(t *testing.T) {
 			if tt.guild != nil {
 				// Gold should be preserved through JSON round trip
 				goldValue := unmarshaledAccount.Guild.Gold.Load()
-				require.Equal(t, int64(1000), goldValue)
+				require.Equal(t, float64(1000), goldValue)
 				require.Equal(t, tt.guild.Name(), unmarshaledAccount.Guild.Name())
 				require.Equal(t, len(tt.expectedChars), len(unmarshaledAccount.Guild.Characters()))
 			} else {
@@ -394,7 +392,7 @@ func TestAccountCreateTavern(t *testing.T) {
 func TestAccountHireCharacter(t *testing.T) {
 	tests := []struct {
 		label       string
-		gold        int64
+		gold        float64
 		expectError bool
 	}{
 		{
@@ -411,8 +409,7 @@ func TestAccountHireCharacter(t *testing.T) {
 
 	for _, tt := range tests {
 		tf := func(t *testing.T) {
-			gold := &atomic.Int64{}
-			gold.Store(tt.gold)
+			gold := game.NewGoldStash(tt.gold)
 
 			account := &AccountActor{
 				mx:       &sync.Mutex{},
@@ -420,7 +417,7 @@ func TestAccountHireCharacter(t *testing.T) {
 				Username: accountName,
 				Guild:    game.NewGuild("TestTavern"),
 			}
-			account.Guild.Gold = gold
+			account.Guild.Gold = &gold
 
 			ctx := context.Background()
 			hireMessage := &system.Message{

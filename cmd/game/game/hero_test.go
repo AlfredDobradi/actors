@@ -12,6 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	GuildName string = "test"
+	HeroName  string = "test"
+)
+
 func TestHeroPriceMultiplier(t *testing.T) {
 	type testCase struct {
 		heroAmount int
@@ -48,7 +53,7 @@ func TestHeroDecideWhatToDo(t *testing.T) {
 		label                 string
 		health                int
 		energy                int
-		gold                  int
+		gold                  float64
 		expectedEitherActions []string
 	}{
 		{health: 30, energy: 100, gold: 1000, expectedEitherActions: []string{ActionNameHeal}},
@@ -88,7 +93,7 @@ func (a *TestAction) GetCooldown() int {
 	return a.cooldown
 }
 
-func (a *TestAction) Execute(ctx context.Context, hero *Hero) {
+func (a *TestAction) Execute(ctx context.Context, hero *Hero, _ *Guild) {
 	hero.Experience += 1
 }
 
@@ -99,6 +104,7 @@ func (a *TestAction) String() string {
 func TestHeroReplayTicks(t *testing.T) {
 	// slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
+	g := NewGuild(GuildName)
 	action := &TestAction{name: "test", cooldown: 15}
 
 	tests := []struct {
@@ -139,8 +145,9 @@ func TestHeroReplayTicks(t *testing.T) {
 				Action:   tt.action,
 				Cooldown: tt.action.GetCooldown(),
 			}
+			g.AddHero(hero)
 
-			err := hero.ReplayTicks(context.Background())
+			err := hero.ReplayTicks(context.Background(), g)
 			require.NoError(t, err)
 			require.True(t, tt.cooldownCheck(hero.Cooldown), "Cooldown after replaying ticks did not match expected value")
 			require.Equal(t, tt.expectedExperience, hero.Experience, "Experience after replaying ticks did not match expected value")
@@ -150,10 +157,49 @@ func TestHeroReplayTicks(t *testing.T) {
 	}
 }
 
+func TestHeroGainGold(t *testing.T) {
+	tests := []struct {
+		label          string
+		originalAmount float64
+		taxRate        float64
+		expectedTax    float64
+		expectedNet    float64
+	}{
+		{
+			label:          "tax positive amount",
+			originalAmount: 100,
+			taxRate:        25,
+			expectedTax:    25,
+			expectedNet:    75,
+		},
+		{
+			label:          "don't tax negative amount",
+			originalAmount: -50,
+			taxRate:        25,
+			expectedTax:    0,
+			expectedNet:    -50,
+		},
+	}
+
+	for _, tt := range tests {
+		tf := func(t *testing.T) {
+			hero := NewHero("test")
+			receipt := hero.GainGold(tt.originalAmount, tt.taxRate)
+
+			require.Equal(t, tt.expectedTax, receipt.Tax)
+			require.Equal(t, tt.expectedNet, receipt.Net)
+		}
+
+		t.Run(tt.label, tf)
+	}
+
+}
+
 func BenchmarkHeroReplayTicksIncremental(b *testing.B) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelWarn,
 	})))
+	g := NewGuild(GuildName)
 	hero := &Hero{
 		ID:        uuid.New(),
 		Health:    100,
@@ -163,11 +209,12 @@ func BenchmarkHeroReplayTicksIncremental(b *testing.B) {
 		Inventory: NewInventory(),
 	}
 
+	g.AddHero(hero)
 	ticks := 20
 
 	for b.Loop() {
 		for range ticks {
-			hero.ProcessTick(context.Background())
+			hero.ProcessTick(context.Background(), g)
 		}
 	}
 }
@@ -176,6 +223,7 @@ func BenchmarkHeroReplayTicksOptimized(b *testing.B) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelWarn,
 	})))
+	g := NewGuild(GuildName)
 	hero := &Hero{
 		ID:        uuid.New(),
 		Health:    100,
@@ -185,8 +233,51 @@ func BenchmarkHeroReplayTicksOptimized(b *testing.B) {
 		Action:    nil,
 		Inventory: NewInventory(),
 	}
+	g.AddHero(hero)
 
 	for b.Loop() {
-		hero.ReplayTicks(context.Background())
+		hero.ReplayTicks(context.Background(), g)
 	}
+}
+
+func TestXpForLevel(t *testing.T) {
+	tests := []struct {
+		level    int
+		expected int
+	}{
+		{level: 1, expected: 0},
+		{level: 2, expected: 100},
+		{level: 3, expected: 324},
+		{level: 4, expected: 647},
+		{level: 5, expected: 1055},
+	}
+
+	for _, test := range tests {
+		result := xpForLevel(test.level)
+		require.Equal(t, test.expected, result)
+	}
+}
+
+func TestGainExperience(t *testing.T) {
+	char := Hero{
+		ID:         uuid.New(),
+		Name:       "Test Character",
+		Level:      1,
+		Experience: 0,
+		Status:     StatusIdle,
+		Cooldown:   0,
+		Action:     nil,
+	}
+
+	char.GainExperience(150)
+	require.Equal(t, 150, char.Experience)
+	require.Equal(t, 2, char.Level)
+
+	char.GainExperience(200)
+	require.Equal(t, 350, char.Experience)
+	require.Equal(t, 3, char.Level)
+
+	char.GainExperience(500)
+	require.Equal(t, 850, char.Experience)
+	require.Equal(t, 4, char.Level)
 }
