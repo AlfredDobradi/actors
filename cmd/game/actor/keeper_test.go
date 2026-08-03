@@ -7,7 +7,6 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/repository/mock"
 	"github.com/alfreddobradi/actors/pkg/database/kv/memory"
 	"github.com/alfreddobradi/actors/pkg/model"
-	pkgmodel "github.com/alfreddobradi/actors/pkg/model"
 	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/testhelper"
 	"github.com/google/uuid"
@@ -20,7 +19,6 @@ func TestKeeperActorFactory(t *testing.T) {
 
 	testhelper.SetupTestLogger(false)
 
-	ctx := context.Background()
 	registry := system.NewRegistry()
 	registry.RegisterFactory(kind, keeperActorFactory)
 
@@ -36,8 +34,8 @@ func TestKeeperActorFactory(t *testing.T) {
 		return nil, nil
 	}
 
-	ctx = context.WithValue(context.Background(), model.ContextKeyDBHandle, repo)
-	ctxWithSender := context.WithValue(ctx, pkgmodel.ContextKeySenderFn, mockSendFunc)
+	ctx := context.WithValue(context.Background(), model.ContextKeyDBHandle, repo)
+	ctxWithSender := context.WithValue(ctx, model.ContextKeySenderFn, mockSendFunc)
 
 	sys := system.MustNewSystem(registry, nil, db)
 	actorHandler, err := sys.Spawn(ctxWithSender, kind)
