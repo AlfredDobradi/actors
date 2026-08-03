@@ -265,7 +265,7 @@ func TestTickerActorFactory(t *testing.T) {
 		expectsResponse bool,
 		senderID uuid.UUID,
 		recipient system.Recipient,
-		message interface{},
+		message any,
 	) (any, error) {
 		return nil, nil
 	}

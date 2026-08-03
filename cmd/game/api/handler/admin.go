@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -8,7 +9,9 @@ import (
 	"github.com/alfreddobradi/actors/cmd/game/api/template"
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	"github.com/alfreddobradi/actors/cmd/game/repository"
+	"github.com/alfreddobradi/actors/pkg/system"
 	"github.com/alfreddobradi/actors/pkg/telemetry"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
@@ -97,5 +100,20 @@ func HandleAdminGetAccount(s *state.Context) func(w http.ResponseWriter, r *http
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
+	}
+}
+
+func HandleAdminForceRefreshConfig(s *state.Context) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		accountID := r.URL.Query().Get("account_id")
+
+		if err := s.System.Publish(r.Context(), uuid.Nil, system.Recipient{Kind: system.RecipientKindTopic, Subject: fmt.Sprintf("actor:%s", accountID)}, model.RefreshConfig{}); err != nil {
+			slog.Error("failed to refresh config", "error", err, "account_id", accountID)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("content-type", "application/json")
+		w.Write([]byte(`{"status": "ok"}`)) //nolint
 	}
 }

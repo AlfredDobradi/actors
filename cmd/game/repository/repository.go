@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/alfreddobradi/actors/cmd/game/game"
 	"github.com/alfreddobradi/actors/cmd/game/model"
 	pgrepo "github.com/alfreddobradi/actors/cmd/game/repository/postgres"
 	"github.com/alfreddobradi/actors/pkg/database"
@@ -25,6 +26,7 @@ type Repository interface {
 	GetSessionsByAccountID(ctx context.Context, accountID string) ([]model.Session, error)
 	PersistAccountActor(ctx context.Context, account model.AccountActor) error
 	RestoreAccountActor(ctx context.Context, accountID uuid.UUID) (*model.AccountActor, error)
+	GetGuildConfig(ctx context.Context, accountID uuid.UUID) (*game.GuildConfig, error)
 }
 
 func Get(db database.Store) (Repository, error) {

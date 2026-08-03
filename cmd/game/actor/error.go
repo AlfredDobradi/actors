@@ -89,3 +89,15 @@ func (e ErrReplayFailed) IsRecoverable() bool {
 func (e ErrReplayFailed) Error() string {
 	return fmt.Sprintf("replay failed: %v (ticks done: %d, ticks remaining: %d, new timestamp: %v)", e.Err, e.TicksDone, e.TicksRemaining, e.Timestamp)
 }
+
+type ErrKeeperDBError struct {
+	Err error
+}
+
+func (e ErrKeeperDBError) Error() string {
+	return fmt.Sprintf("failed to execute requested statement: %s", e.Err.Error())
+}
+
+func (e ErrKeeperDBError) IsRecoverable() bool {
+	return true
+}

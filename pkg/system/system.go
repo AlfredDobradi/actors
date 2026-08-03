@@ -480,6 +480,16 @@ func (s *System) AttemptRestoreActor(ctx context.Context, kind string, params mo
 		return nil, fmt.Errorf("no factory registered for kind: %s", kind)
 	}
 
+	senderFn := SenderFunc(func(ctx context.Context, request bool, sender uuid.UUID, recipient Recipient, payload any) (any, error) {
+		if request {
+			return s.bus.Request(ctx, sender, recipient, payload)
+		}
+
+		err := s.bus.Publish(ctx, sender, recipient, payload)
+		return nil, err
+	})
+	ctx = context.WithValue(ctx, model.ContextKeySenderFn, senderFn)
+
 	// Create actor with the ID to identify the snapshot
 	accountCtx := context.WithValue(ctx, model.ContextKeyFactoryParams, params)
 	actor := factory.Fn(accountCtx)

@@ -61,6 +61,7 @@ func NewServer(sys *system.System, kv database.KeyValue, db database.Store) *Ser
 	// admin.Use(middleware.Authorization(db))
 	admin.HandleFunc("/accounts", handler.HandleAdminGetAccounts(s.context)).Methods(http.MethodGet)
 	admin.HandleFunc("/accounts/{accountId}", handler.HandleAdminGetAccount(s.context)).Methods(http.MethodGet)
+	admin.HandleFunc("/config", handler.HandleAdminForceRefreshConfig(s.context)).Methods(http.MethodGet)
 
 	a := router.PathPrefix("/account").Subrouter()
 	a.Use(middleware.Authorization(db))

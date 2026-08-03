@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -195,6 +196,20 @@ func (r *Repository) GetAccount(ctx context.Context, accountID string) (model.Ac
 	return account, nil
 }
 
+func (r *Repository) GetGuildConfig(ctx context.Context, accountID uuid.UUID) (*game.GuildConfig, error) {
+	settings := game.GuildConfig{}
+	if err := r.db.Select(&settings, "SELECT guild_id, config, created_at, updated_at FROM guild_config WHERE account_id = $1", accountID); err != nil {
+		if err.Error() != "sql: no rows in result set" {
+			slog.Warn("no guild config found, creating one with default values", "account_id", accountID)
+			return nil, err
+		}
+
+		settings = *game.NewGuildConfig()
+	}
+
+	return &settings, nil
+}
+
 func (r *Repository) GetSessionsByAccountID(ctx context.Context, accountID string) ([]model.Session, error) {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Retrieving sessions for account", "account_id", accountID)
@@ -236,6 +251,22 @@ type actionAux struct {
 func (r *Repository) persistGuildData(ctx context.Context, tx *sqlx.Tx, accountID uuid.UUID, guild *game.Guild) error {
 	span := telemetry.SpanFromContext(ctx)
 	span.GetLogger().Info("Persisting guild data", "account_id", accountID)
+	now := time.Now()
+
+	settings := bytes.NewBufferString("")
+	encoder := json.NewEncoder(settings)
+	if err := encoder.Encode(guild.Settings()); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("INSERT INTO guild_config (guild_id, config, created_at, updated_at) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id) DO UPDATE SET config = $2, updated_at = $4",
+		guild.ID(),
+		settings.Bytes(),
+		now,
+		now,
+	); err != nil {
+		return err
+	}
 
 	// upsert guild data (account_id, name, gold)
 	if _, err := tx.Exec("INSERT INTO guilds (id, account_id, name, gold, updated_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id, account_id) DO UPDATE SET gold = $4, updated_at = $5",
@@ -243,7 +274,7 @@ func (r *Repository) persistGuildData(ctx context.Context, tx *sqlx.Tx, accountI
 		accountID,
 		guild.Name(),
 		guild.Gold.Load(),
-		time.Now(),
+		now,
 	); err != nil {
 		return err
 	}
@@ -324,10 +355,14 @@ func (r *Repository) restoreGuildData(ctx context.Context, accountID uuid.UUID) 
 		return nil, err
 	}
 
-	guild := game.GuildFromAux(guildAux)
+	settings, configErr := r.GetGuildConfig(ctx, accountID)
+	if configErr != nil {
+		return nil, configErr
+	}
+
+	guild := game.GuildFromAux(guildAux, settings)
 
 	heroes := make([]game.Hero, 0)
-
 	if err := r.db.Select(&heroes, "SELECT id, name, guild_id, level, experience, status, cooldown, health, energy, gold, last_tick FROM heroes WHERE guild_id = $1", guild.ID()); err != nil {
 		return nil, err
 	}

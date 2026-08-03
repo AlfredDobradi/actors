@@ -21,7 +21,7 @@ const (
 
 type Action interface {
 	GetName() string
-	Execute(ctx context.Context, character *Hero)
+	Execute(ctx context.Context, character *Hero, guild *Guild)
 	GetCooldown() int
 	String() string
 }
@@ -139,7 +139,7 @@ func (f *FightAction) String() string {
 	return "is fighting"
 }
 
-func (f *FightAction) Execute(ctx context.Context, character *Hero) {
+func (f *FightAction) Execute(ctx context.Context, character *Hero, _ *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
 	ctxLogger.Info("Executing fight action")
@@ -171,7 +171,7 @@ type GatherAction struct {
 	Resource Resource
 }
 
-func (g *GatherAction) Execute(ctx context.Context, character *Hero) {
+func (g *GatherAction) Execute(ctx context.Context, character *Hero, _ *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
 	ctxLogger.Info("Executing gather action", "resource", g.Resource.Name)
@@ -200,7 +200,7 @@ func (h *HealAction) String() string {
 	return "is healing"
 }
 
-func (h *HealAction) Execute(ctx context.Context, character *Hero) {
+func (h *HealAction) Execute(ctx context.Context, character *Hero, _ *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
 	ctxLogger.Info("Executing heal action")
@@ -223,7 +223,7 @@ func (r *RestAction) String() string {
 	return "is resting"
 }
 
-func (r *RestAction) Execute(ctx context.Context, character *Hero) {
+func (r *RestAction) Execute(ctx context.Context, character *Hero, _ *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
 	ctxLogger.Info("Executing rest action")
@@ -246,7 +246,7 @@ func (i *IdleAction) String() string {
 	return "is doing absolutely nothing"
 }
 
-func (i *IdleAction) Execute(ctx context.Context, character *Hero) {
+func (i *IdleAction) Execute(ctx context.Context, character *Hero, _ *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
 	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
 	ctxLogger.Info("Character is idle")
@@ -266,16 +266,18 @@ func (t *TavernAction) String() string {
 	return "is visiting the tavern"
 }
 
-func (t *TavernAction) Execute(ctx context.Context, character *Hero) {
+func (t *TavernAction) Execute(ctx context.Context, hero *Hero, g *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
-	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
+	ctxLogger := slog.With("span_id", spanID, "characterID", hero.ID, "characterName", hero.Name)
 	ctxLogger.Info("Character is visiting the tavern")
 
-	moneyModifier := rand.Intn(200) - 100 //nolint:gosec
-	character.Gold += moneyModifier
+	moneyModifier := rand.Float64()*100 - 100 //nolint:gosec
+	receipt := hero.GainGold(moneyModifier, g.settings.TaxRate)
+	g.Gold.Add(receipt.Tax)
+
 	energyLoss := rand.Intn(25) + 5 //nolint:gosec
-	character.Energy -= energyLoss
-	ctxLogger.Info("Character's tavern visit resulted in gold change", "goldChange", moneyModifier, "newGold", character.Gold, "energyLoss", energyLoss, "newEnergy", character.Energy)
+	hero.Energy -= energyLoss
+	ctxLogger.Info("Character's tavern visit resulted in gold change", "gold_change", receipt.Net, "new_gold", hero.Gold, "energy_loss", energyLoss, "new_energy", hero.Energy)
 }
 
 func (t *TavernAction) GetCooldown() int {
@@ -292,23 +294,24 @@ func (a *AdventureAction) String() string {
 	return "is going on an adventure"
 }
 
-func (a *AdventureAction) Execute(ctx context.Context, character *Hero) {
+func (a *AdventureAction) Execute(ctx context.Context, hero *Hero, g *Guild) {
 	spanID := telemetry.SpanIDFromContext(ctx)
-	ctxLogger := slog.With("span_id", spanID, "characterID", character.ID, "characterName", character.Name)
+	ctxLogger := slog.With("span_id", spanID, "characterID", hero.ID, "characterName", hero.Name)
 	ctxLogger.Info("Character is going on an adventure")
 
 	// For simplicity, we'll just have a random chance to gain experience and lose some health and energy
 	experienceGained := rand.Intn(50) + 10 //nolint:gosec
 	healthLoss := rand.Intn(30) + 10       //nolint:gosec
 	energyLoss := rand.Intn(30) + 10       //nolint:gosec
-	goldGained := rand.Intn(100)           //nolint:gosec
+	goldGained := rand.Float64() * 100     //nolint:gosec
 
-	character.GainExperience(experienceGained)
-	character.Health -= healthLoss
-	character.Energy -= energyLoss
-	character.Gold += goldGained
+	hero.GainExperience(experienceGained)
+	hero.Health -= healthLoss
+	hero.Energy -= energyLoss
+	receipt := hero.GainGold(goldGained, g.settings.TaxRate)
+	g.Gold.Add(receipt.Tax)
 
-	ctxLogger.Info("Character's adventure results", "experienceGained", experienceGained, "newExperience", character.Experience, "healthLoss", healthLoss, "newHealth", character.Health, "energyLoss", energyLoss, "newEnergy", character.Energy, "goldGained", goldGained, "newGold", character.Gold)
+	ctxLogger.Info("Character's adventure results", "experience_gained", experienceGained, "new_experience", hero.Experience, "health_loss", healthLoss, "new_health", hero.Health, "energy_loss", energyLoss, "new_energy", hero.Energy, "gold_gained", receipt.Net, "new_gold", hero.Gold)
 }
 
 func (a *AdventureAction) GetCooldown() int {

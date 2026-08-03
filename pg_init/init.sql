@@ -27,6 +27,15 @@ CREATE TABLE guilds (
     UNIQUE (id, account_id)
 );
 
+CREATE TABLE guild_config (
+    guild_id UUID NOT NULL,
+    config JSONB DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    UNIQUE (guild_id)
+);
+
 CREATE TABLE heroes (
     id UUID NOT NULL,
     name VARCHAR(200) NOT NULL,
@@ -36,7 +45,7 @@ CREATE TABLE heroes (
     health INT,
     energy INT,
     experience INT,
-    gold INT,
+    gold FLOAT,
     last_tick TIMESTAMP DEFAULT NULL,
     status INT,
     action JSON,

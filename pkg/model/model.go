@@ -11,6 +11,7 @@ const (
 	ContextKeySpanID        ContextKey = "span_id"
 	ContextKeyFactoryParams ContextKey = "factory_params"
 	ContextKeyAccountID     ContextKey = "account_id"
+	ContextKeyDBHandle      ContextKey = "database_handle"
 )
 
 type ActorState uint8
